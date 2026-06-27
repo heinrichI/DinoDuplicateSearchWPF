@@ -64,6 +64,21 @@ public class SearchViewModel : INotifyPropertyChanged
 
     public string MinSimilarityText => MinSimilarityForPair.ToString("F2");
 
+    private int _batchSize = 32;
+    public int BatchSize
+    {
+        get => _batchSize;
+        set { _batchSize = value; OnPropertyChanged();  }
+    }
+
+
+    private int _prefetchCount = 2;
+    public int PrefetchCount
+    {
+        get => _prefetchCount;
+        set { _prefetchCount = value; OnPropertyChanged(); }
+    }
+
     private double _progressValue;
     public double ProgressValue
     {
@@ -108,6 +123,7 @@ public class SearchViewModel : INotifyPropertyChanged
 
     public ICommand BrowseCommand { get; }
     public ICommand FindCommand { get; }
+    public ICommand CancelCommand { get; }
     public ICommand ClearCacheCommand { get; }
 
     public event Action<List<DuplicateGroup>>? SearchCompleted;
@@ -117,6 +133,7 @@ public class SearchViewModel : INotifyPropertyChanged
     {
         BrowseCommand = new RelayCommand(_ => Browse());
         FindCommand = new RelayCommand(_ => FindDuplicates(), _ => !IsSearching);
+        CancelCommand = new RelayCommand(_ => _cts?.Cancel(), _ => IsSearching);
         ClearCacheCommand = new RelayCommand(_ => ClearCache(), _ => !IsSearching);
         LoadConfig();
     }
@@ -161,17 +178,21 @@ public class SearchViewModel : INotifyPropertyChanged
 
         try
         {
+            var settings = new SearchSettings
+            {
+                DirectoryPath = DirectoryPath,
+                DistanceThreshold = (float)DistanceThreshold,
+                GeometricCheckEnabled = GeometricCheckEnabled,
+                WgcThreshold = (float)WgcThreshold,
+                MinSimilarityForPair = (float)MinSimilarityForPair,
+                SearchSubfolders = SearchSubfolders,
+                BatchSize = BatchSize,
+                PrefetchCount = PrefetchCount
+            };
+
             var results = await Task.Run(() =>
             {
-                return _finder.FindDuplicates(
-                    DirectoryPath,
-                    (float)DistanceThreshold,
-                    GeometricCheckEnabled,
-                    (float)WgcThreshold,
-                    (float)MinSimilarityForPair,
-                    SearchSubfolders,
-                    progress,
-                    ct);
+                return _finder.FindDuplicates(settings, progress, ct);
             }, ct);
 
             SearchCompleted?.Invoke(results);
@@ -227,6 +248,10 @@ public class SearchViewModel : INotifyPropertyChanged
                     DirectoryPath = dir.GetString() ?? "";
                 if (doc.RootElement.TryGetProperty("search_subfolders", out var sub))
                     SearchSubfolders = sub.GetBoolean();
+                if (doc.RootElement.TryGetProperty("batch_size", out var bs))
+                    BatchSize = bs.GetInt32();
+                if (doc.RootElement.TryGetProperty("prefetch_count", out var pc))
+                    PrefetchCount = pc.GetInt32();
             }
         }
         catch { }
@@ -236,7 +261,7 @@ public class SearchViewModel : INotifyPropertyChanged
     {
         try
         {
-            var json = JsonSerializer.Serialize(new { last_directory = DirectoryPath, search_subfolders = SearchSubfolders });
+            var json = JsonSerializer.Serialize(new { last_directory = DirectoryPath, search_subfolders = SearchSubfolders, batch_size = BatchSize, prefetch_count = PrefetchCount });
             File.WriteAllText(ConfigFile, json);
         }
         catch { }

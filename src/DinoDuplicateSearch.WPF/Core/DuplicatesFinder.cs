@@ -30,22 +30,19 @@ public class DuplicatesFinder
     }
 
     public List<DuplicateGroup> FindDuplicates(
-        string folderPath,
-        float distanceThreshold = 0.45f,
-        bool enableGeometricCheck = false,
-        float wgcThreshold = 0.3f,
-        float minSimilarityForUnion = 0.5f,
-        bool searchSubfolders = false,
+        SearchSettings settings,
         IProgress<ProgressData>? progress = null,
         CancellationToken ct = default)
     {
-        _wgcThreshold = wgcThreshold;
-        _minSimilarityForUnion = minSimilarityForUnion;
+        _wgcThreshold = settings.WgcThreshold;
+        _minSimilarityForUnion = settings.MinSimilarityForPair;
         _embeddingExtractor.SetProgress(progress);
+        _embeddingExtractor.BatchSize = settings.BatchSize;
+        _embeddingExtractor.PrefetchCount = settings.PrefetchCount;
 
         ct.ThrowIfCancellationRequested();
         progress?.Report(new ProgressData(0, "Scanning folder for images..."));
-        var paths = ListImages(folderPath, searchSubfolders);
+        var paths = ListImages(settings.DirectoryPath, settings.SearchSubfolders);
         if (paths.Count == 0)
         {
             progress?.Report(new ProgressData(100, "No images found"));
@@ -54,7 +51,7 @@ public class DuplicatesFinder
         progress?.Report(new ProgressData(2, $"Found {paths.Count} images. Loading model..."));
 
         progress?.Report(new ProgressData(5, "Computing embeddings..."));
-        var embs = _embeddingExtractor.EmbedImagesBatch(paths);
+        var embs = _embeddingExtractor.EmbedImagesBatch(paths, ct);
 
         var embs2D = new float[paths.Count, 768];
         for (int i = 0; i < paths.Count; i++)
@@ -63,7 +60,7 @@ public class DuplicatesFinder
 
         ct.ThrowIfCancellationRequested();
         progress?.Report(new ProgressData(40, "Clustering images..."));
-        var labels = AgglomerativeClustering.FitPredict(embs2D, distanceThreshold);
+        var labels = AgglomerativeClustering.FitPredict(embs2D, settings.DistanceThreshold);
 
         var clusters = new Dictionary<int, List<string>>();
         for (int i = 0; i < paths.Count; i++)
@@ -106,7 +103,7 @@ public class DuplicatesFinder
                         Similarity = sim
                     };
 
-                    if (enableGeometricCheck)
+                    if (settings.GeometricCheckEnabled)
                     {
                         var (ok, angle, scale, angleVotes, scaleVotes) = VerifyGeometric(items[i], items[j]);
                         pair.GeometricVerified = ok;
@@ -145,7 +142,7 @@ public class DuplicatesFinder
         var groups = new List<DuplicateGroup>();
         int groupId = 0;
 
-        if (enableGeometricCheck)
+        if (settings.GeometricCheckEnabled)
         {
             foreach (var clusterKvp in clusters)
             {

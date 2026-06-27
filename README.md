@@ -108,3 +108,9 @@ DinoDuplicateSearch/
 ## Лицензия
 
 Свободное использование.
+
+Для работы GPU могут понадобится опреденные версии cuda и cudnn. Если их нет в path, то можно указать в appsettings.json:
+{
+  "cuda_path": "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.4\\bin",
+  "cudnn_path": "c:\\Program Files\\NVIDIA\\CUDNN\\v9.23\\bin\\12.9\\x64"
+} 

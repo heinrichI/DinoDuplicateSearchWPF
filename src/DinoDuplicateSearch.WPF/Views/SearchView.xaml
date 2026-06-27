@@ -109,11 +109,61 @@
                     </Grid>
                 </Border>
 
-                <!-- Find Button -->
-                <Button Content="{Binding FindButtonText}"
-                        Style="{StaticResource BlueButton}"
-                        Margin="0,0,0,8"
-                        Command="{Binding FindCommand}"/>
+                <!-- Batch Size -->
+                <Border Background="#FFF8F8F8" CornerRadius="4" Padding="8" Margin="0,0,0,16">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="50"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Batch size:" VerticalAlignment="Center" FontSize="13" Foreground="#FF666666"/>
+                        <Slider Grid.Column="0"
+                                Minimum="1"                                 Maximum="512"
+                                Value="{Binding BatchSize}"
+                                TickFrequency="1" IsSnapToTickEnabled="True"
+                                VerticalAlignment="Center" Margin="0,16,50,0"/>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding BatchSize}"
+                                   VerticalAlignment="Center" HorizontalAlignment="Center"
+                                   FontSize="14" FontWeight="SemiBold"/>
+                    </Grid>
+                </Border>
+
+                <!-- Prefetch Count -->
+                <Border Background="#FFF8F8F8" CornerRadius="4" Padding="8" Margin="0,0,0,16">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="50"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Prefetch:" VerticalAlignment="Center" FontSize="13" Foreground="#FF666666"/>
+                        <Slider Grid.Column="0"
+                                Minimum="0" Maximum="2560"
+                                Value="{Binding PrefetchCount}"
+                                TickFrequency="1" IsSnapToTickEnabled="True"
+                                VerticalAlignment="Center" Margin="0,16,50,0"/>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding PrefetchCount}"
+                                   VerticalAlignment="Center" HorizontalAlignment="Center"
+                                   FontSize="14" FontWeight="SemiBold"/>
+                    </Grid>
+                </Border>
+
+                <!-- Find / Cancel Buttons -->
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0" Content="{Binding FindButtonText}"
+                            Style="{StaticResource BlueButton}"
+                            Command="{Binding FindCommand}"/>
+                    <Button Grid.Column="1" Content="Stop"
+                            Style="{StaticResource RedButton}"
+                            Width="80" Margin="8,0,0,0"
+                            Visibility="{Binding IsSearching, Converter={x:Static views:BoolToVisibilityConverter.Instance}}"
+                            Command="{Binding CancelCommand}"/>
+                </Grid>
 
                 <!-- Clear Cache Button -->
                 <Button Content="Clear Cache"
