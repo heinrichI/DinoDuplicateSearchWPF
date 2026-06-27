@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="OpenCvSharp4" Version="4.10.*" />
+    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.10.*" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DinoDuplicateSearch.Models\DinoDuplicateSearch.Models.csproj" />
+  </ItemGroup>
+</Project>

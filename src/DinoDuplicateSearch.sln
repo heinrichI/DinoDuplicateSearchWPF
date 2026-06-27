@@ -1,0 +1,49 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.37411.7
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DinoDuplicateSearch.CV", "DinoDuplicateSearch.CV\DinoDuplicateSearch.CV.csproj", "{925AB194-0D89-C395-4F2D-7164C30DAB7F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DinoDuplicateSearch.Database", "DinoDuplicateSearch.Database\DinoDuplicateSearch.Database.csproj", "{D7674032-4003-1A79-5598-AA4B0E8EE0E8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DinoDuplicateSearch.ML", "DinoDuplicateSearch.ML\DinoDuplicateSearch.ML.csproj", "{614BDA93-1B3C-7797-CE16-24756DAF91CE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DinoDuplicateSearch.Models", "DinoDuplicateSearch.Models\DinoDuplicateSearch.Models.csproj", "{CBD926D9-E97F-7223-D89A-4B22418C2EB0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DinoDuplicateSearch.WPF", "DinoDuplicateSearch.WPF\DinoDuplicateSearch.WPF.csproj", "{7835C7A0-FBDC-09DB-AD69-0236E7E588BF}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{925AB194-0D89-C395-4F2D-7164C30DAB7F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{925AB194-0D89-C395-4F2D-7164C30DAB7F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{925AB194-0D89-C395-4F2D-7164C30DAB7F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{925AB194-0D89-C395-4F2D-7164C30DAB7F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D7674032-4003-1A79-5598-AA4B0E8EE0E8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D7674032-4003-1A79-5598-AA4B0E8EE0E8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D7674032-4003-1A79-5598-AA4B0E8EE0E8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D7674032-4003-1A79-5598-AA4B0E8EE0E8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{614BDA93-1B3C-7797-CE16-24756DAF91CE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{614BDA93-1B3C-7797-CE16-24756DAF91CE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{614BDA93-1B3C-7797-CE16-24756DAF91CE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{614BDA93-1B3C-7797-CE16-24756DAF91CE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CBD926D9-E97F-7223-D89A-4B22418C2EB0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CBD926D9-E97F-7223-D89A-4B22418C2EB0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CBD926D9-E97F-7223-D89A-4B22418C2EB0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CBD926D9-E97F-7223-D89A-4B22418C2EB0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7835C7A0-FBDC-09DB-AD69-0236E7E588BF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7835C7A0-FBDC-09DB-AD69-0236E7E588BF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7835C7A0-FBDC-09DB-AD69-0236E7E588BF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7835C7A0-FBDC-09DB-AD69-0236E7E588BF}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {BB45C0C2-97B2-4CA3-8ED3-160A3521F64D}
+	EndGlobalSection
+EndGlobal

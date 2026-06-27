@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OpenCvSharp4.WpfExtensions" Version="4.10.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="DinoDuplicateSearch.Models\**" />
+    <Compile Remove="DinoDuplicateSearch.Database\**" />
+    <Compile Remove="DinoDuplicateSearch.CV\**" />
+    <Compile Remove="DinoDuplicateSearch.ML\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DinoDuplicateSearch.CV\DinoDuplicateSearch.CV.csproj" />
+    <ProjectReference Include="..\DinoDuplicateSearch.Database\DinoDuplicateSearch.Database.csproj" />
+    <ProjectReference Include="..\DinoDuplicateSearch.ML\DinoDuplicateSearch.ML.csproj" />
+    <ProjectReference Include="..\DinoDuplicateSearch.Models\DinoDuplicateSearch.Models.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Models\dinov2-base.onnx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="config.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

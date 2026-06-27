@@ -1,0 +1,66 @@
+<Window x:Class="DinoDuplicateSearch.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:DinoDuplicateSearch.ViewModels"
+        xmlns:views="clr-namespace:DinoDuplicateSearch.Views"
+        Title="DINOv2 Duplicate Finder" Height="700" Width="1000"
+        WindowStartupLocation="CenterScreen"
+        Background="#FFF5F5F5">
+
+    <Window.DataContext>
+        <vm:MainViewModel/>
+    </Window.DataContext>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="42"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Tab Navigation Bar -->
+        <Border Grid.Row="0" Background="White" BorderBrush="#FFE0E0E0" BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0" Content="Search"
+                        Command="{Binding SwitchTabCommand}" CommandParameter="0">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource TabButton}">
+                            <Setter Property="Background" Value="#FFE8E8E8"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedTabIndex}" Value="0">
+                                    <Setter Property="Background" Value="#FF3399FF"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+                <Button Grid.Column="1" Content="Results"
+                        Command="{Binding SwitchTabCommand}" CommandParameter="1">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource TabButton}">
+                            <Setter Property="Background" Value="#FFE8E8E8"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedTabIndex}" Value="1">
+                                    <Setter Property="Background" Value="#FF3399FF"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- Content Area -->
+        <Grid Grid.Row="1">
+            <views:SearchView Visibility="{Binding DataContext.SelectedTabIndex, RelativeSource={RelativeSource AncestorType=Window}, Converter={x:Static views:TabIndexToVisibilityConverter.Instance}}"
+                              DataContext="{Binding Search}"/>
+            <views:ResultsView Visibility="{Binding DataContext.SelectedTabIndex, RelativeSource={RelativeSource AncestorType=Window}, Converter={x:Static views:TabIndexToVisibilityConverter.Result}}"
+                               DataContext="{Binding Results}"/>
+        </Grid>
+    </Grid>
+</Window>
