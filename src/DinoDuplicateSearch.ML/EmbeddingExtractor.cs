@@ -1,6 +1,7 @@
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using DinoDuplicateSearch.Database;
+using DinoDuplicateSearch.Models;
 
 namespace DinoDuplicateSearch.ML;
 
@@ -9,7 +10,9 @@ public class EmbeddingExtractor : IDisposable
     private readonly string _modelPath;
     private InferenceSession? _session;
     private readonly FeatureCache _cache;
-    private Action<double, string>? _progressCallback;
+    private IProgress<ProgressData>? _progress;
+    private bool _useGpu;
+    private const int BatchSize = 8;
 
     public EmbeddingExtractor(string modelPath = "Models/dinov2-base.onnx", FeatureCache? cache = null)
     {
@@ -17,15 +20,15 @@ public class EmbeddingExtractor : IDisposable
         _cache = cache ?? new FeatureCache();
     }
 
-    public void SetProgressCallback(Action<double, string>? callback)
+    public void SetProgress(IProgress<ProgressData>? progress)
     {
-        _progressCallback = callback;
+        _progress = progress;
     }
 
     private void LoadModel()
     {
         if (_session != null) return;
-        _progressCallback?.Invoke(0, "Loading ONNX model...");
+        _progress?.Report(new ProgressData(0, "Loading ONNX model..."));
         var options = new SessionOptions
         {
             GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL
@@ -33,69 +36,131 @@ public class EmbeddingExtractor : IDisposable
         try
         {
             options.AppendExecutionProvider_CUDA();
-            _progressCallback?.Invoke(5, "Using GPU (CUDA)...");
+            _useGpu = true;
+            _progress?.Report(new ProgressData(5, "Using GPU (CUDA)..."));
+            DebugLog.Write("[MODEL] GPU (CUDA) available, using GPU");
         }
-        catch (Exception ex)
+        catch
         {
-            _progressCallback?.Invoke(5, "GPU unavailable (install cuDNN for CUDA), using CPU...");
+            _progress?.Report(new ProgressData(5, "GPU unavailable (install cuDNN for CUDA), using CPU..."));
+            DebugLog.Write("[MODEL] GPU unavailable, using CPU");
         }
         _session = new InferenceSession(_modelPath, options);
-        _progressCallback?.Invoke(100, "Model loaded");
+        _progress?.Report(new ProgressData(100, "Model loaded"));
     }
 
     public float[] EmbedImage(string path)
     {
-        var currentMtime = 0.0;
-        try { currentMtime = File.GetLastWriteTimeUtc(path).Ticks / (double)TimeSpan.TicksPerSecond; }
-        catch { }
+        var results = EmbedImagesBatch(new[] { path });
+        return results[0];
+    }
 
-        var cached = _cache.GetEmbedding(path);
-        if (cached.HasValue && Math.Abs(cached.Value.mtime - currentMtime) < 0.01)
-            return cached.Value.embedding;
-
+    public List<float[]> EmbedImagesBatch(List<string> paths)
+    {
         LoadModel();
 
-        _progressCallback?.Invoke(-1, $"Reading image...\n{Path.GetFileName(path)}");
-        using var mat = OpenCvSharp.Cv2.ImRead(path);
-        if (mat.Empty()) return new float[768];
+        var result = new float[paths.Count][];
+        var toEmbed = new List<(int index, string path)>();
 
-        OpenCvSharp.Cv2.CvtColor(mat, mat, OpenCvSharp.ColorConversionCodes.BGR2RGB);
-        OpenCvSharp.Cv2.Resize(mat, mat, new OpenCvSharp.Size(224, 224));
-
-        _progressCallback?.Invoke(-1, $"Preparing tensor...\n{Path.GetFileName(path)}");
-        var input = new DenseTensor<float>(new[] { 1, 3, 224, 224 });
-        for (int y = 0; y < 224; y++)
+        for (int i = 0; i < paths.Count; i++)
         {
-            for (int x = 0; x < 224; x++)
+            var currentMtime = 0.0;
+            try { currentMtime = File.GetLastWriteTimeUtc(paths[i]).Ticks / (double)TimeSpan.TicksPerSecond; }
+            catch { }
+
+            var cached = _cache.GetEmbedding(paths[i]);
+            if (cached.HasValue && Math.Abs(cached.Value.mtime - currentMtime) < 0.01)
             {
-                var pixel = mat.At<OpenCvSharp.Vec3b>(y, x);
-                input[0, 0, y, x] = pixel[0] / 255f;
-                input[0, 1, y, x] = pixel[1] / 255f;
-                input[0, 2, y, x] = pixel[2] / 255f;
+                result[i] = cached.Value.embedding;
+            }
+            else
+            {
+                toEmbed.Add((i, paths[i]));
             }
         }
 
-        var inputs = new List<NamedOnnxValue>
+        if (toEmbed.Count == 0)
+            return result;
+
+        for (int batchStart = 0; batchStart < toEmbed.Count; batchStart += BatchSize)
         {
-            NamedOnnxValue.CreateFromTensor("pixel_values", input)
-        };
+            var batch = toEmbed.Skip(batchStart).Take(BatchSize).ToList();
+            var batchTensors = new List<DenseTensor<float>>();
+            var batchPaths = new List<(int index, string path, double mtime)>();
 
-        _progressCallback?.Invoke(-1, $"Running inference on GPU...\n{Path.GetFileName(path)}");
-        using var results = _session!.Run(inputs);
-        var output = results.First().AsTensor<float>().ToArray();
+            foreach (var (index, path) in batch)
+            {
+                var mtime = 0.0;
+                try { mtime = File.GetLastWriteTimeUtc(path).Ticks / (double)TimeSpan.TicksPerSecond; }
+                catch { }
 
-        var cls = new float[768];
-        Array.Copy(output, cls, 768);
+                var basename = Path.GetFileName(path);
+                var pct = 5 + (int)((double)(batchStart + batch.IndexOf((index, path))) / toEmbed.Count * 35);
+                _progress?.Report(new ProgressData(pct, $"Embedding ({batchStart + batch.IndexOf((index, path)) + 1}/{toEmbed.Count})", basename));
 
-        float norm = 0;
-        for (int i = 0; i < cls.Length; i++) norm += cls[i] * cls[i];
-        norm = MathF.Sqrt(norm);
-        if (norm > 0) for (int i = 0; i < cls.Length; i++) cls[i] /= norm;
+                using var mat = OpenCvSharp.Cv2.ImRead(path);
+                if (mat.Empty())
+                {
+                    result[index] = new float[768];
+                    continue;
+                }
 
-        try { _cache.SetEmbedding(path, currentMtime, cls); }
-        catch { }
+                OpenCvSharp.Cv2.CvtColor(mat, mat, OpenCvSharp.ColorConversionCodes.BGR2RGB);
+                OpenCvSharp.Cv2.Resize(mat, mat, new OpenCvSharp.Size(224, 224));
 
-        return cls;
+                var tensor = new DenseTensor<float>(new[] { 1, 3, 224, 224 });
+                for (int y = 0; y < 224; y++)
+                    for (int x = 0; x < 224; x++)
+                    {
+                        var pixel = mat.At<OpenCvSharp.Vec3b>(y, x);
+                        tensor[0, 0, y, x] = pixel[0] / 255f;
+                        tensor[0, 1, y, x] = pixel[1] / 255f;
+                        tensor[0, 2, y, x] = pixel[2] / 255f;
+                    }
+
+                batchTensors.Add(tensor);
+                batchPaths.Add((index, path, mtime));
+            }
+
+            if (batchTensors.Count == 0) continue;
+
+            var batchTensor = new DenseTensor<float>(new[] { batchTensors.Count, 3, 224, 224 });
+            for (int b = 0; b < batchTensors.Count; b++)
+                for (int c = 0; c < 3; c++)
+                    for (int y = 0; y < 224; y++)
+                        for (int x = 0; x < 224; x++)
+                            batchTensor[b, c, y, x] = batchTensors[b][0, c, y, x];
+
+            var inputs = new List<NamedOnnxValue>
+            {
+                NamedOnnxValue.CreateFromTensor("pixel_values", batchTensor)
+            };
+
+            _progress?.Report(new ProgressData(-1, _useGpu ? $"Running batch on GPU ({batchTensors.Count})..." : $"Running batch on CPU ({batchTensors.Count})..."));
+            using var results = _session!.Run(inputs);
+            var output = results.First().AsTensor<float>().ToArray();
+
+            for (int b = 0; b < batchPaths.Count; b++)
+            {
+                var embedding = new float[768];
+                Array.Copy(output, b * 768, embedding, 0, 768);
+
+                float norm = 0;
+                for (int i = 0; i < embedding.Length; i++) norm += embedding[i] * embedding[i];
+                norm = MathF.Sqrt(norm);
+                if (norm > 0) for (int i = 0; i < embedding.Length; i++) embedding[i] /= norm;
+
+                var (index, path, mtime) = batchPaths[b];
+                result[index] = embedding;
+
+                try { _cache.SetEmbedding(path, mtime, embedding); }
+                catch { }
+            }
+
+            foreach (var t in batchTensors) t.Dispose();
+        }
+
+        return result;
     }
 
     public void Dispose()

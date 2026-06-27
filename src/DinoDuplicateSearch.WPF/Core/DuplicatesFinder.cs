@@ -10,7 +10,6 @@ public class DuplicatesFinder
 {
     private readonly EmbeddingExtractor _embeddingExtractor;
     private readonly FeatureCache _cache;
-    private Action<double, string>? _progressCallback;
     private float _wgcThreshold = 0.3f;
     private float _minSimilarityForUnion = 0.5f;
 
@@ -37,38 +36,33 @@ public class DuplicatesFinder
         float wgcThreshold = 0.3f,
         float minSimilarityForUnion = 0.5f,
         bool searchSubfolders = false,
-        Action<double, string>? progressCallback = null)
+        IProgress<ProgressData>? progress = null,
+        CancellationToken ct = default)
     {
         _wgcThreshold = wgcThreshold;
         _minSimilarityForUnion = minSimilarityForUnion;
-        _progressCallback = progressCallback;
-        _embeddingExtractor.SetProgressCallback(progressCallback);
+        _embeddingExtractor.SetProgress(progress);
 
-        progressCallback?.Invoke(0, "Scanning folder for images...");
+        ct.ThrowIfCancellationRequested();
+        progress?.Report(new ProgressData(0, "Scanning folder for images..."));
         var paths = ListImages(folderPath, searchSubfolders);
         if (paths.Count == 0)
         {
-            progressCallback?.Invoke(100, "No images found");
+            progress?.Report(new ProgressData(100, "No images found"));
             return new List<DuplicateGroup>();
         }
-        progressCallback?.Invoke(2, $"Found {paths.Count} images. Loading model...");
+        progress?.Report(new ProgressData(2, $"Found {paths.Count} images. Loading model..."));
 
-        progressCallback?.Invoke(5, "Computing embeddings...");
-        var embs = new float[paths.Count][];
-        for (int i = 0; i < paths.Count; i++)
-        {
-            var basename = Path.GetFileName(paths[i]);
-            var pct = 5 + (int)((double)i / paths.Count * 35);
-            progressCallback?.Invoke(pct, $"Embedding ({i + 1}/{paths.Count})\nFile: {basename}");
-            embs[i] = _embeddingExtractor.EmbedImage(paths[i]);
-        }
+        progress?.Report(new ProgressData(5, "Computing embeddings..."));
+        var embs = _embeddingExtractor.EmbedImagesBatch(paths);
 
         var embs2D = new float[paths.Count, 768];
         for (int i = 0; i < paths.Count; i++)
             for (int d = 0; d < 768; d++)
                 embs2D[i, d] = embs[i][d];
 
-        progressCallback?.Invoke(40, "Clustering images...");
+        ct.ThrowIfCancellationRequested();
+        progress?.Report(new ProgressData(40, "Clustering images..."));
         var labels = AgglomerativeClustering.FitPredict(embs2D, distanceThreshold);
 
         var clusters = new Dictionary<int, List<string>>();
@@ -79,7 +73,8 @@ public class DuplicatesFinder
             clusters[labels[i]].Add(paths[i]);
         }
 
-        progressCallback?.Invoke(45, "Verifying geometric consistency...");
+        ct.ThrowIfCancellationRequested();
+        progress?.Report(new ProgressData(45, "Verifying geometric consistency..."));
         int pairCount = 0;
         int totalPairs = clusters.Values.Sum(items => items.Count * (items.Count - 1) / 2);
 
@@ -134,7 +129,7 @@ public class DuplicatesFinder
                         var b2 = Path.GetFileName(items[j]);
                         var status = ok ? "PASS" : "FAIL";
                         var basePct = totalPairs > 0 ? 45 + (int)((double)pairCount / totalPairs * 35) : 45;
-                        progressCallback?.Invoke(basePct, $"WGC: {b1} vs {b2}\n[{status}] sim={sim:F3} angle={angleVotes}v scale={scaleVotes}v");
+                        progress?.Report(new ProgressData(basePct, $"WGC: {b1} vs {b2}", $"[{status}] sim={sim:F3} angle={angleVotes}v scale={scaleVotes}v"));
                     }
 
                     pairs.Add((pair, items[i], items[j]));
@@ -145,7 +140,8 @@ public class DuplicatesFinder
             clusterWgcGraph[clusterId] = wgcGraph;
         }
 
-        progressCallback?.Invoke(80, "Building duplicate groups...");
+        ct.ThrowIfCancellationRequested();
+        progress?.Report(new ProgressData(80, "Building duplicate groups..."));
         var groups = new List<DuplicateGroup>();
         int groupId = 0;
 
@@ -206,7 +202,7 @@ public class DuplicatesFinder
             }
         }
 
-        progressCallback?.Invoke(100, $"Found {groups.Count} duplicate groups");
+        progress?.Report(new ProgressData(100, $"Found {groups.Count} duplicate groups"));
         return groups;
     }
 

@@ -1,5 +1,7 @@
 namespace DinoDuplicateSearch.Models;
 
+public record ProgressData(double Percent, string Status, string? FilePath = null);
+
 public class DuplicatePair
 {
     public string Path1 { get; set; } = "";

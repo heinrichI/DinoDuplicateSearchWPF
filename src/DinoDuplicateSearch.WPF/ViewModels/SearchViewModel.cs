@@ -151,6 +151,14 @@ public class SearchViewModel : INotifyPropertyChanged
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
 
+        var progress = new ThrottledProgress<ProgressData>(data =>
+        {
+            if (data.Percent >= 0)
+                ProgressValue = data.Percent;
+            StatusText = data.Status;
+            FileText = data.FilePath ?? "";
+        }, TimeSpan.FromMilliseconds(250));
+
         try
         {
             var results = await Task.Run(() =>
@@ -162,21 +170,14 @@ public class SearchViewModel : INotifyPropertyChanged
                     (float)WgcThreshold,
                     (float)MinSimilarityForPair,
                     SearchSubfolders,
-                    (percent, message) =>
-                    {
-                        Application.Current.Dispatcher.Invoke(() =>
-                        {
-                            ProgressValue = percent;
-                            var lines = message.Split('\n');
-                            StatusText = lines[0];
-                            FileText = lines.Length > 1 ? lines[1] : "";
-                        });
-                    });
+                    progress,
+                    ct);
             }, ct);
 
             SearchCompleted?.Invoke(results);
             SwitchToResults?.Invoke(1);
         }
+        catch (OperationCanceledException) { }
         catch (Exception ex)
         {
             MessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);

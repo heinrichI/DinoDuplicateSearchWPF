@@ -1,6 +1,6 @@
 using System.IO;
 
-namespace DinoDuplicateSearch.Core;
+namespace DinoDuplicateSearch.Models;
 
 public static class DebugLog
 {
