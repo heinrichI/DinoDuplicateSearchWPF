@@ -7,7 +7,8 @@
     <Border Background="#FFF5F5F5">
         <Border Margin="20" Background="White" CornerRadius="8" Padding="24"
                 BorderBrush="#FFE0E0E0" BorderThickness="1">
-            <StackPanel>
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel>
 
                 <!-- Header -->
                 <TextBlock Text="Select Directory" Style="{StaticResource SectionLabel}"/>
@@ -35,8 +36,9 @@
                 <TextBlock Text="Settings" Style="{StaticResource SectionLabel}"/>
 
                 <!-- Distance Threshold -->
-                <TextBlock Text="Distance Threshold (lower = stricter):" FontSize="13" Foreground="#FF666666" Margin="0,0,0,4"/>
-                <Border Background="#FFF8F8F8" CornerRadius="4" Padding="8" Margin="0,0,0,12">
+                <TextBlock Text="Distance Threshold (lower = stricter):" FontSize="13" Foreground="#FF666666" Margin="0,0,0,4"
+                           ToolTip="Maximum cosine distance between images to be considered duplicates. Lower values require more similarity."/>
+                <Border Background="#FFF8F8F8" CornerRadius="4" Padding="8" Margin="0,0,0,12" ToolTip="0.01 = very strict (only near-identical), 1.0 = very loose (any images)">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -55,7 +57,8 @@
                 </Border>
 
                 <!-- Geometric Check -->
-                <Border Background="#FFF8F8F8" CornerRadius="4" Padding="8" Margin="0,0,0,12">
+                <Border Background="#FFF8F8F8" CornerRadius="4" Padding="8" Margin="0,0,0,12"
+                        ToolTip="Enable SIFT feature matching + Weak Geometric Consistency check. Slower but more accurate — filters out false positives.">
                     <StackPanel Orientation="Horizontal">
                         <CheckBox IsChecked="{Binding GeometricCheckEnabled}" VerticalAlignment="Center"/>
                         <TextBlock Text="Enable geometric verification (SIFT/WGC)" VerticalAlignment="Center" Margin="8,0,0,0" FontSize="13"/>
@@ -63,7 +66,8 @@
                 </Border>
 
                 <!-- Search Subfolders -->
-                <Border Background="#FFF8F8F8" CornerRadius="4" Padding="8" Margin="0,0,0,12">
+                <Border Background="#FFF8F8F8" CornerRadius="4" Padding="8" Margin="0,0,0,12"
+                        ToolTip="Recursively search all subdirectories for images.">
                     <StackPanel Orientation="Horizontal">
                         <CheckBox IsChecked="{Binding SearchSubfolders}" VerticalAlignment="Center"/>
                         <TextBlock Text="Search in subfolders" VerticalAlignment="Center" Margin="8,0,0,0" FontSize="13"/>
@@ -71,7 +75,8 @@
                 </Border>
 
                 <!-- WGC Threshold -->
-                <Border Background="#FFF8F8F8" CornerRadius="4" Padding="8" Margin="0,0,0,16">
+                <Border Background="#FFF8F8F8" CornerRadius="4" Padding="8" Margin="0,0,0,16"
+                        ToolTip="Minimum ratio of matching angle/scale votes for WGC to pass. Higher = stricter geometric consistency.">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -90,7 +95,8 @@
                 </Border>
 
                 <!-- Min Similarity for Pair -->
-                <Border Background="#FFF8F8F8" CornerRadius="4" Padding="8" Margin="0,0,0,16">
+                <Border Background="#FFF8F8F8" CornerRadius="4" Padding="8" Margin="0,0,0,16"
+                        ToolTip="Minimum cosine similarity for a pair to be added to the WGC graph. Lower values include more pairs but may add noise.">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -110,7 +116,8 @@
                 </Border>
 
                 <!-- Batch Size -->
-                <Border Background="#FFF8F8F8" CornerRadius="4" Padding="8" Margin="0,0,0,16">
+                <Border Background="#FFF8F8F8" CornerRadius="4" Padding="8" Margin="0,0,0,16"
+                        ToolTip="Number of images processed simultaneously in ONNX inference. Higher = faster but uses more GPU memory.">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -118,7 +125,7 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="Batch size:" VerticalAlignment="Center" FontSize="13" Foreground="#FF666666"/>
                         <Slider Grid.Column="0"
-                                Minimum="1"                                 Maximum="512"
+                                Minimum="1" Maximum="512"
                                 Value="{Binding BatchSize}"
                                 TickFrequency="1" IsSnapToTickEnabled="True"
                                 VerticalAlignment="Center" Margin="0,16,50,0"/>
@@ -130,7 +137,8 @@
                 </Border>
 
                 <!-- Prefetch Count -->
-                <Border Background="#FFF8F8F8" CornerRadius="4" Padding="8" Margin="0,0,0,16">
+                <Border Background="#FFF8F8F8" CornerRadius="4" Padding="8" Margin="0,0,0,16"
+                        ToolTip="Pipeline depth for producer/consumer batching. Higher = smoother GPU utilization but more memory.">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -144,6 +152,48 @@
                                 VerticalAlignment="Center" Margin="0,16,50,0"/>
                         <TextBlock Grid.Column="1"
                                    Text="{Binding PrefetchCount}"
+                                   VerticalAlignment="Center" HorizontalAlignment="Center"
+                                   FontSize="14" FontWeight="SemiBold"/>
+                    </Grid>
+                </Border>
+
+                <!-- Max Cluster Size -->
+                <Border Background="#FFF8F8F8" CornerRadius="4" Padding="8" Margin="0,0,0,16"
+                        ToolTip="Maximum images per cluster. Larger clusters = more WGC comparisons (O(n²)). Smaller = faster but may split real duplicate groups.">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="50"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Max cluster size:" VerticalAlignment="Center" FontSize="13" Foreground="#FF666666"/>
+                        <Slider Grid.Column="0"
+                                Minimum="2" Maximum="50"
+                                Value="{Binding MaxClusterSize}"
+                                TickFrequency="1" IsSnapToTickEnabled="True"
+                                VerticalAlignment="Center" Margin="0,16,50,0"/>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding MaxClusterSizeText}"
+                                   VerticalAlignment="Center" HorizontalAlignment="Center"
+                                   FontSize="14" FontWeight="SemiBold"/>
+                    </Grid>
+                </Border>
+
+                <!-- Transitivity Ratio -->
+                <Border Background="#FFF8F8F8" CornerRadius="4" Padding="8" Margin="0,0,0,16"
+                        ToolTip="Controls transitive merging. Ratio × DistanceThreshold = transitivity threshold. Lower = breaks chains earlier, prevents giant clusters.">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="50"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Transitivity ratio (lower = stricter):" VerticalAlignment="Center" FontSize="13" Foreground="#FF666666"/>
+                        <Slider Grid.Column="0"
+                                Minimum="0.1" Maximum="1.0"
+                                Value="{Binding TransitivityRatio}"
+                                TickFrequency="0.05" IsSnapToTickEnabled="True"
+                                VerticalAlignment="Center" Margin="0,16,50,0"/>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding TransitivityRatioText}"
                                    VerticalAlignment="Center" HorizontalAlignment="Center"
                                    FontSize="14" FontWeight="SemiBold"/>
                     </Grid>
@@ -172,7 +222,7 @@
 
                 <!-- Progress -->
                 <Border Visibility="{Binding IsProgressVisible, Converter={x:Static views:BoolToVisibilityConverter.Instance}}"
-                        Margin="0,16,0,0" Background="#FFF8F8F8" CornerRadius="4" Padding="12">
+                        Margin="0,12,0,0" Background="#FFF8F8F8" CornerRadius="4" Padding="12">
                     <StackPanel>
                         <ProgressBar Value="{Binding ProgressValue}" Maximum="100" Height="20" Margin="0,0,0,8"/>
                         <TextBlock Text="{Binding StatusText}" FontSize="13" Foreground="#FF444444"/>
@@ -180,7 +230,8 @@
                     </StackPanel>
                 </Border>
 
-            </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
         </Border>
     </Border>
 </UserControl>

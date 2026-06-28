@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text;
 using System.Windows.Media.Imaging;
 using OpenCvSharp;
@@ -19,12 +20,23 @@ public static class ImageUtils
             if (!img.Empty()) return img;
         }
 
-        var uri = new Uri(path, UriKind.Absolute);
-        var bitmap = new BitmapImage(uri);
-        bitmap.Freeze();
-        var mat = BitmapImageToMat(bitmap);
-        Cv2.CvtColor(mat, mat, ColorConversionCodes.RGB2BGR);
-        return mat;
+        try
+        {
+            using var stream = File.OpenRead(path);
+            var bitmap = new BitmapImage();
+            bitmap.BeginInit();
+            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.StreamSource = stream;
+            bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+            bitmap.EndInit();
+            bitmap.Freeze();
+            var mat = BitmapImageToMat(bitmap);
+            Cv2.CvtColor(mat, mat, ColorConversionCodes.RGB2BGR);
+            return mat;
+        }
+        catch { }
+
+        return new Mat();
     }
 
     private static Mat BitmapImageToMat(BitmapImage bitmap)

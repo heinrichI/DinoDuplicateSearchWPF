@@ -1,28 +1,99 @@
+using System.Numerics;
+using System.Threading;
+using System.Threading.Tasks;
+using DinoDuplicateSearch.Models;
+
 namespace DinoDuplicateSearch.ML;
 
 public static class AgglomerativeClustering
 {
-    public static int[] FitPredict(float[,] embeddings, float distanceThreshold)
-    {
-        var n = embeddings.GetLength(0);
-        var dim = embeddings.GetLength(1);
+    private const int SmallDatasetThreshold = 10_000;
 
-        var dist = new float[n, n];
+    public static int[] FitPredict(float[][] embeddings, float distanceThreshold, IProgress<ProgressData>? progress = null, float transitivityRatio = 0.7f)
+    {
+        var n = embeddings.Length;
+        if (n == 0) return Array.Empty<int>();
+
+        return n <= SmallDatasetThreshold
+            ? FitPredictAgglomerative(embeddings, distanceThreshold, progress)
+            : FitPredictUnionFind(embeddings, distanceThreshold, progress, transitivityRatio);
+    }
+
+    private static int[] FitPredictUnionFind(float[][] embeddings, float distanceThreshold, IProgress<ProgressData>? progress, float transitivityRatio = 0.7f)
+    {
+        var n = embeddings.Length;
+        var dim = embeddings[0].Length;
+        float transitivityThreshold = distanceThreshold * transitivityRatio;
+
+        var edges = new System.Collections.Concurrent.ConcurrentBag<(int i, int j, float dist)>();
+        int completed = 0;
+        int reportInterval = Math.Max(1, n / 100);
+
+        Parallel.For(0, n, i =>
+        {
+            for (int j = i + 1; j < n; j++)
+            {
+                float dist = 1 - DotProduct(embeddings[i], embeddings[j], dim);
+                if (dist < distanceThreshold)
+                    edges.Add((i, j, dist));
+            }
+
+            int done = Interlocked.Increment(ref completed);
+            if (done % reportInterval == 0)
+                progress?.Report(new ProgressData(40.0 + 5.0 * done / n, $"Clustering: {done}/{n}"));
+        });
+
+        progress?.Report(new ProgressData(43, "Graph clustering..."));
+        var sortedEdges = edges.OrderBy(e => e.dist).ToArray();
+
+        var uf = new UnionFind(n);
+        foreach (var (i, j, dist) in sortedEdges)
+        {
+            if (uf.Find(i) == uf.Find(j)) continue;
+            if (dist < transitivityThreshold)
+            {
+                uf.Union(i, j);
+            }
+            else
+            {
+                var rootI = uf.Find(i);
+                var rootJ = uf.Find(j);
+                if (uf.Size(rootI) + uf.Size(rootJ) <= 50)
+                    uf.Union(i, j);
+            }
+        }
+
+        progress?.Report(new ProgressData(45, "Clustering complete"));
+        return uf.GetLabels();
+    }
+
+    private static int[] FitPredictAgglomerative(float[][] embeddings, float distanceThreshold, IProgress<ProgressData>? progress)
+    {
+        var n = embeddings.Length;
+        var dim = embeddings[0].Length;
+
+        var dist = new float[n][];
+        for (int i = 0; i < n; i++)
+            dist[i] = new float[n];
+
         for (int i = 0; i < n; i++)
         {
             for (int j = i + 1; j < n; j++)
             {
-                float dot = 0;
-                for (int d = 0; d < dim; d++)
-                    dot += embeddings[i, d] * embeddings[j, d];
-                dist[i, j] = 1 - dot;
-                dist[j, i] = dist[i, j];
+                float dot = DotProduct(embeddings[i], embeddings[j], dim);
+                dist[i][j] = 1 - dot;
+                dist[j][i] = dist[i][j];
             }
+            if (i % Math.Max(1, n / 100) == 0)
+                progress?.Report(new ProgressData(40.0 + 2.0 * i / n, $"Building distance matrix: {i}/{n}"));
         }
 
         var labels = Enumerable.Range(0, n).ToArray();
         var clusterSize = Enumerable.Repeat(1, n).ToArray();
         var active = Enumerable.Repeat(true, n).ToArray();
+
+        int activeCount = n;
+        int mergeStep = 0;
 
         while (true)
         {
@@ -35,9 +106,9 @@ public static class AgglomerativeClustering
                 for (int j = i + 1; j < n; j++)
                 {
                     if (!active[j]) continue;
-                    if (dist[i, j] < minDist)
+                    if (dist[i][j] < minDist)
                     {
-                        minDist = dist[i, j];
+                        minDist = dist[i][j];
                         minI = i;
                         minJ = j;
                     }
@@ -50,10 +121,10 @@ public static class AgglomerativeClustering
             for (int k = 0; k < n; k++)
             {
                 if (!active[k] || k == minI || k == minJ) continue;
-                float newDist = (dist[minI, k] * clusterSize[minI] + dist[minJ, k] * clusterSize[minJ])
+                float newDist = (dist[minI][k] * clusterSize[minI] + dist[minJ][k] * clusterSize[minJ])
                                / (clusterSize[minI] + clusterSize[minJ]);
-                dist[minI, k] = newDist;
-                dist[k, minI] = newDist;
+                dist[minI][k] = newDist;
+                dist[k][minI] = newDist;
             }
 
             var oldLabel = labels[minJ];
@@ -66,7 +137,14 @@ public static class AgglomerativeClustering
 
             clusterSize[minI] += clusterSize[minJ];
             active[minJ] = false;
+            activeCount--;
+            mergeStep++;
+
+            if (mergeStep % Math.Max(1, n / 100) == 0)
+                progress?.Report(new ProgressData(42.0 + 3.0 * (n - activeCount) / n, $"Merging clusters: {mergeStep} merges, {activeCount} active"));
         }
+
+        progress?.Report(new ProgressData(45, "Clustering complete"));
 
         var uniqueLabels = labels.Distinct().OrderBy(x => x).ToArray();
         var labelMap = new Dictionary<int, int>();
@@ -77,5 +155,85 @@ public static class AgglomerativeClustering
             labels[i] = labelMap[labels[i]];
 
         return labels;
+    }
+
+    private static float DotProduct(float[] a, float[] b, int dim)
+    {
+        int i = 0;
+        float sum = 0;
+
+        int vecSize = Vector<float>.Count;
+        if (vecSize > 0 && dim >= vecSize)
+        {
+            var sumVec = Vector<float>.Zero;
+            for (; i <= dim - vecSize; i += vecSize)
+                sumVec += new Vector<float>(a, i) * new Vector<float>(b, i);
+            for (int j = 0; j < vecSize; j++)
+                sum += sumVec[j];
+        }
+
+        for (; i < dim; i++)
+            sum += a[i] * b[i];
+
+        return sum;
+    }
+
+    private class UnionFind
+    {
+        private readonly int[] _parent;
+        private readonly int[] _size;
+
+        public UnionFind(int n)
+        {
+            _parent = new int[n];
+            _size = new int[n];
+            for (int i = 0; i < n; i++)
+            {
+                _parent[i] = i;
+                _size[i] = 1;
+            }
+        }
+
+        public int Find(int x)
+        {
+            while (_parent[x] != x)
+            {
+                _parent[x] = _parent[_parent[x]];
+                x = _parent[x];
+            }
+            return x;
+        }
+
+        public void Union(int a, int b)
+        {
+            a = Find(a);
+            b = Find(b);
+            if (a == b) return;
+            if (_size[a] < _size[b])
+                (a, b) = (b, a);
+            _parent[b] = a;
+            _size[a] += _size[b];
+        }
+
+        public int Size(int x) => _size[Find(x)];
+
+        public int[] GetLabels()
+        {
+            int n = _parent.Length;
+            var rootToLabel = new Dictionary<int, int>();
+            int nextLabel = 0;
+            var labels = new int[n];
+            for (int i = 0; i < n; i++)
+            {
+                int root = Find(i);
+                if (!rootToLabel.TryGetValue(root, out int label))
+                {
+                    label = nextLabel++;
+                    rootToLabel[root] = label;
+                }
+                labels[i] = label;
+            }
+            return labels;
+        }
     }
 }

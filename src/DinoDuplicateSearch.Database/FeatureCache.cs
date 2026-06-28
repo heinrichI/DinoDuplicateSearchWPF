@@ -16,6 +16,8 @@ public class FeatureCache : IDisposable
         cmd.ExecuteNonQuery();
         cmd.CommandText = "PRAGMA synchronous=NORMAL";
         cmd.ExecuteNonQuery();
+        cmd.CommandText = "PRAGMA busy_timeout=5000";
+        cmd.ExecuteNonQuery();
         cmd.CommandText = "PRAGMA auto_vacuum=INCREMENTAL";
         cmd.ExecuteNonQuery();
 
@@ -153,15 +155,20 @@ public class FeatureCache : IDisposable
 
     public void SetWgc(string path1, string path2, double mtime1, double mtime2, bool result, float angle, float scale, int angleVotes, int scaleVotes)
     {
-        var (p1, p2) = string.Compare(path1, path2) < 0 ? (path1, path2) : (path2, path1);
+        bool swapped = string.Compare(path1, path2) >= 0;
+        var fp1 = swapped ? path2 : path1;
+        var fp2 = swapped ? path1 : path2;
+        var sm1 = swapped ? mtime2 : mtime1;
+        var sm2 = swapped ? mtime1 : mtime2;
+
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = @"INSERT OR REPLACE INTO wgc_results
             (path1, path2, mtime1, mtime2, result, angle, scale, angle_votes, scale_votes)
             VALUES (@p1, @p2, @m1, @m2, @r, @a, @s, @av, @sv)";
-        cmd.Parameters.AddWithValue("@p1", p1);
-        cmd.Parameters.AddWithValue("@p2", p2);
-        cmd.Parameters.AddWithValue("@m1", mtime1);
-        cmd.Parameters.AddWithValue("@m2", mtime2);
+        cmd.Parameters.AddWithValue("@p1", fp1);
+        cmd.Parameters.AddWithValue("@p2", fp2);
+        cmd.Parameters.AddWithValue("@m1", sm1);
+        cmd.Parameters.AddWithValue("@m2", sm2);
         cmd.Parameters.AddWithValue("@r", result);
         cmd.Parameters.AddWithValue("@a", angle);
         cmd.Parameters.AddWithValue("@s", scale);
@@ -190,6 +197,14 @@ public class FeatureCache : IDisposable
         cmd.CommandText = "PRAGMA page_count";
         var afterPages = (long)cmd.ExecuteScalar()!;
         return (beforePages - afterPages) * pageSize;
+    }
+
+    public long GetEmbeddingsHash()
+    {
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM embeddings";
+        int count = Convert.ToInt32(cmd.ExecuteScalar());
+        return count;
     }
 
     public void Dispose()

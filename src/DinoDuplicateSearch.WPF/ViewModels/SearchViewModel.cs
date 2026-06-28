@@ -79,6 +79,24 @@ public class SearchViewModel : INotifyPropertyChanged
         set { _prefetchCount = value; OnPropertyChanged(); }
     }
 
+    private int _maxClusterSize = 50;
+    public int MaxClusterSize
+    {
+        get => _maxClusterSize;
+        set { _maxClusterSize = value; OnPropertyChanged(); OnPropertyChanged(nameof(MaxClusterSizeText)); }
+    }
+
+    public string MaxClusterSizeText => MaxClusterSize.ToString();
+
+    private double _transitivityRatio = 0.7;
+    public double TransitivityRatio
+    {
+        get => _transitivityRatio;
+        set { _transitivityRatio = value; OnPropertyChanged(); OnPropertyChanged(nameof(TransitivityRatioText)); }
+    }
+
+    public string TransitivityRatioText => TransitivityRatio.ToString("F2");
+
     private double _progressValue;
     public double ProgressValue
     {
@@ -187,7 +205,9 @@ public class SearchViewModel : INotifyPropertyChanged
                 MinSimilarityForPair = (float)MinSimilarityForPair,
                 SearchSubfolders = SearchSubfolders,
                 BatchSize = BatchSize,
-                PrefetchCount = PrefetchCount
+                PrefetchCount = PrefetchCount,
+                MaxClusterSize = MaxClusterSize,
+                TransitivityRatio = (float)TransitivityRatio
             };
 
             var results = await Task.Run(() =>
@@ -252,6 +272,10 @@ public class SearchViewModel : INotifyPropertyChanged
                     BatchSize = bs.GetInt32();
                 if (doc.RootElement.TryGetProperty("prefetch_count", out var pc))
                     PrefetchCount = pc.GetInt32();
+                if (doc.RootElement.TryGetProperty("max_cluster_size", out var mc))
+                    MaxClusterSize = mc.GetInt32();
+                if (doc.RootElement.TryGetProperty("transitivity_ratio", out var tr))
+                    TransitivityRatio = tr.GetDouble();
             }
         }
         catch { }
@@ -261,7 +285,15 @@ public class SearchViewModel : INotifyPropertyChanged
     {
         try
         {
-            var json = JsonSerializer.Serialize(new { last_directory = DirectoryPath, search_subfolders = SearchSubfolders, batch_size = BatchSize, prefetch_count = PrefetchCount });
+            var json = JsonSerializer.Serialize(new
+            {
+                last_directory = DirectoryPath,
+                search_subfolders = SearchSubfolders,
+                batch_size = BatchSize,
+                prefetch_count = PrefetchCount,
+                max_cluster_size = MaxClusterSize,
+                transitivity_ratio = TransitivityRatio
+            });
             File.WriteAllText(ConfigFile, json);
         }
         catch { }

@@ -10,4 +10,6 @@ public class SearchSettings
     public bool SearchSubfolders { get; set; }
     public int BatchSize { get; set; } = 32;
     public int PrefetchCount { get; set; } = 2;
+    public int MaxClusterSize { get; set; } = 50;
+    public float TransitivityRatio { get; set; } = 0.7f;
 }
