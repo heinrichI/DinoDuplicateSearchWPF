@@ -1,5 +1,8 @@
 namespace DinoDuplicateSearch.Models;
 
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 public record ProgressData(double Percent, string Status, string? FilePath = null);
 
 public class DuplicatePair
@@ -19,6 +22,7 @@ public class DuplicateGroup
     public int ClusterId { get; set; }
     public List<DuplicatePair> Pairs { get; set; } = new();
 
+    [JsonIgnore]
     public List<string> Paths
     {
         get
@@ -33,8 +37,10 @@ public class DuplicateGroup
         }
     }
 
+    [JsonIgnore]
     public bool IsGeometricVerified => Pairs.Any(p => p.GeometricVerified);
 
+    [JsonIgnore]
     public float AvgSimilarity
     {
         get
@@ -42,5 +48,34 @@ public class DuplicateGroup
             if (Pairs.Count == 0) return 0;
             return Pairs.Average(p => p.Similarity);
         }
+    }
+}
+
+public class SearchResult
+{
+    public string DirectoryPath { get; set; } = "";
+    public List<DuplicateGroup> Groups { get; set; } = new();
+    public DateTime SavedAt { get; set; } = DateTime.Now;
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true
+    };
+
+    public static void Save(string filePath, SearchResult result)
+    {
+        var json = JsonSerializer.Serialize(result, JsonOptions);
+        File.WriteAllText(filePath, json);
+    }
+
+    public static SearchResult? Load(string filePath)
+    {
+        if (!File.Exists(filePath)) return null;
+        try
+        {
+            var json = File.ReadAllText(filePath);
+            return JsonSerializer.Deserialize<SearchResult>(json, JsonOptions);
+        }
+        catch { return null; }
     }
 }

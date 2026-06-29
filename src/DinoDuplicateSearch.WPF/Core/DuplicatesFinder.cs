@@ -10,7 +10,7 @@ using DinoDuplicateSearch.WPF.Core;
 
 namespace DinoDuplicateSearch.Core;
 
-public class DuplicatesFinder
+public class DuplicatesFinder : IDisposable
 {
     private const int PQThreshold = 50_000;
     private const int PQSubvectorCount = 96;
@@ -111,12 +111,23 @@ public class DuplicatesFinder
         var clusterWgcGraph = new System.Collections.Concurrent.ConcurrentDictionary<int, Dictionary<string, HashSet<string>>>();
         int pairCount = 0;
 
-        Parallel.ForEach(clusters, new ParallelOptions { CancellationToken = ct }, clusterKvp =>
-        {
-            var clusterId = clusterKvp.Key;
-            var items = clusterKvp.Value;
-            if (items.Count <= 1) return;
+        var pathToIndex = new Dictionary<string, int>(paths.Count);
+        for (int i = 0; i < paths.Count; i++)
+            pathToIndex[paths[i]] = i;
 
+        var clusterData = new List<(int clusterId, List<string> items, float[][] clusterEmbs)>();
+        foreach (var clusterKvp in clusters)
+        {
+            if (clusterKvp.Value.Count <= 1) continue;
+            var clusterEmbs = new float[clusterKvp.Value.Count][];
+            for (int i = 0; i < clusterKvp.Value.Count; i++)
+                clusterEmbs[i] = embs[pathToIndex[clusterKvp.Value[i]]];
+            clusterData.Add((clusterKvp.Key, clusterKvp.Value, clusterEmbs));
+        }
+
+        Parallel.ForEach(clusterData, new ParallelOptions { CancellationToken = ct, MaxDegreeOfParallelism = settings.WgcParallelism }, data =>
+        {
+            var (clusterId, items, clusterEmbs) = data;
             var pairs = new List<(DuplicatePair pair, string p1, string p2)>();
             var wgcGraph = new Dictionary<string, HashSet<string>>();
             foreach (var item in items) wgcGraph[item] = new HashSet<string>();
@@ -126,45 +137,51 @@ public class DuplicatesFinder
                 ct.ThrowIfCancellationRequested();
                 for (int j = i + 1; j < items.Count; j++)
                 {
-                    var idx1 = paths.IndexOf(items[i]);
-                    var idx2 = paths.IndexOf(items[j]);
-                    var sim = DotProduct(embs[idx1], embs[idx2]);
-
-                    var pair = new DuplicatePair
-                    {
-                        Path1 = items[i],
-                        Path2 = items[j],
-                        Similarity = sim
-                    };
+                    var sim = DotProduct(clusterEmbs[i], clusterEmbs[j]);
 
                     if (settings.GeometricCheckEnabled)
                     {
                         var (ok, angle, scale, angleVotes, scaleVotes) = VerifyGeometric(items[i], items[j]);
-                        pair.GeometricVerified = ok;
-                        pair.GeometricAngle = angle;
-                        pair.GeometricAngleVotes = angleVotes;
-                        pair.GeometricScale = scale;
-                        pair.GeometricScaleVotes = scaleVotes;
 
-                        var fn1 = Path.GetFileName(items[i]);
-                        var fn2 = Path.GetFileName(items[j]);
-                        DebugLog.Write($"[WGC] cluster={clusterId} {fn1} <-> {fn2} : {(ok ? "PASS" : "FAIL")} sim={sim:F4} angle={angle:F1}({angleVotes}) scale={scale:F2}({scaleVotes})");
+                        int done = Interlocked.Increment(ref pairCount);
+                        if (done % Math.Max(1, totalPairs / 100) == 0)
+                        {
+                            var b1 = Path.GetFileName(items[i]);
+                            var b2 = Path.GetFileName(items[j]);
+                            var status = ok ? "PASS" : "FAIL";
+                            progress?.Report(new ProgressData(45.0 + 35.0 * done / totalPairs, $"WGC: {done}/{totalPairs} {b1} vs {b2}", $"[{status}] sim={sim:F3}"));
+                        }
 
                         if (ok && sim >= _minSimilarityForUnion)
                         {
+                            var pair = new DuplicatePair
+                            {
+                                Path1 = items[i],
+                                Path2 = items[j],
+                                Similarity = sim,
+                                GeometricVerified = true,
+                                GeometricAngle = angle,
+                                GeometricAngleVotes = angleVotes,
+                                GeometricScale = scale,
+                                GeometricScaleVotes = scaleVotes
+                            };
+                            pairs.Add((pair, items[i], items[j]));
                             lock (wgcGraph[items[i]]) wgcGraph[items[i]].Add(items[j]);
                             lock (wgcGraph[items[j]]) wgcGraph[items[j]].Add(items[i]);
                         }
-
-                        var b1 = Path.GetFileName(items[i]);
-                        var b2 = Path.GetFileName(items[j]);
-                        var status = ok ? "PASS" : "FAIL";
-                        int done = Interlocked.Increment(ref pairCount);
-                        var basePct = totalPairs > 0 ? 45 + (int)((double)done / totalPairs * 35) : 45;
-                        progress?.Report(new ProgressData(basePct, $"WGC: {done}/{totalPairs} {b1} vs {b2}", $"[{status}] sim={sim:F3} angle={angleVotes}v scale={scaleVotes}v"));
                     }
-
-                    pairs.Add((pair, items[i], items[j]));
+                    else
+                    {
+                        var pair = new DuplicatePair
+                        {
+                            Path1 = items[i],
+                            Path2 = items[j],
+                            Similarity = sim
+                        };
+                        pairs.Add((pair, items[i], items[j]));
+                        lock (wgcGraph[items[i]]) wgcGraph[items[i]].Add(items[j]);
+                        lock (wgcGraph[items[j]]) wgcGraph[items[j]].Add(items[i]);
+                    }
                 }
             }
             clusterPairs[clusterId] = pairs;
@@ -449,8 +466,14 @@ public class DuplicatesFinder
             return (cached.Value.result, cached.Value.angle, cached.Value.scale, cached.Value.angleVotes, cached.Value.scaleVotes);
         }
 
-        var kp1 = GeometricConsistency.ExtractSiftFeaturesWithDescriptors(ImageUtils.ReadImageCv2(path1));
-        var kp2 = GeometricConsistency.ExtractSiftFeaturesWithDescriptors(ImageUtils.ReadImageCv2(path2));
+        using var mat1 = ImageUtils.ReadImageCv2(path1);
+        using var mat2 = ImageUtils.ReadImageCv2(path2);
+
+        if (mat1.Empty() || mat2.Empty())
+            return (false, 0, 0, 0, 0);
+
+        var kp1 = GeometricConsistency.ExtractSiftFeaturesWithDescriptors(mat1);
+        var kp2 = GeometricConsistency.ExtractSiftFeaturesWithDescriptors(mat2);
 
         if (kp1.keypoints.Length == 0 || kp2.keypoints.Length == 0 || kp1.descriptors == null || kp2.descriptors == null)
             return (false, 0, 0, 0, 0);
@@ -509,5 +532,11 @@ public class DuplicatesFinder
             candidates.Remove(v);
             excluded.Add(v);
         }
+    }
+
+    public void Dispose()
+    {
+        _embeddingExtractor?.Dispose();
+        _cache?.Dispose();
     }
 }

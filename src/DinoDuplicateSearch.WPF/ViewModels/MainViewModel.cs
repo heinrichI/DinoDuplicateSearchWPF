@@ -6,7 +6,7 @@ using System.Windows.Input;
 
 namespace DinoDuplicateSearch.ViewModels;
 
-public class MainViewModel : INotifyPropertyChanged
+public class MainViewModel : INotifyPropertyChanged, IDisposable
 {
     private int _selectedTabIndex;
     public int SelectedTabIndex
@@ -47,6 +47,11 @@ public class MainViewModel : INotifyPropertyChanged
 
     protected void OnPropertyChanged([CallerMemberName] string? name = null)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+    public void Dispose()
+    {
+        Search?.Dispose();
+    }
 }
 
 public class RelayCommand : ICommand

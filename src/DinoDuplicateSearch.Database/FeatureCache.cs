@@ -137,7 +137,7 @@ public class FeatureCache : IDisposable
 
     public (bool result, float angle, float scale, int angleVotes, int scaleVotes)? GetWgc(string path1, string path2, double mtime1, double mtime2)
     {
-        var (p1, p2) = string.Compare(path1, path2) < 0 ? (path1, path2) : (path2, path1);
+        var (p1, p2, time1, time2) = string.Compare(path1, path2) < 0 ? (path1, path2, mtime1, mtime2) : (path2, path1, mtime2, mtime1);
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = "SELECT result, angle, scale, angle_votes, scale_votes, mtime1, mtime2 FROM wgc_results WHERE path1=@p1 AND path2=@p2";
         cmd.Parameters.AddWithValue("@p1", p1);
@@ -147,7 +147,7 @@ public class FeatureCache : IDisposable
 
         var cachedMtime1 = reader.GetDouble(5);
         var cachedMtime2 = reader.GetDouble(6);
-        if (Math.Abs(cachedMtime1 - mtime1) > 0.01 || Math.Abs(cachedMtime2 - mtime2) > 0.01)
+        if (Math.Abs(cachedMtime1 - time1) > 0.01 || Math.Abs(cachedMtime2 - time2) > 0.01)
             return null;
 
         return (reader.GetBoolean(0), (float)reader.GetDouble(1), (float)reader.GetDouble(2), reader.GetInt32(3), reader.GetInt32(4));

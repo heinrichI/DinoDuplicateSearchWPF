@@ -10,9 +10,10 @@ using DinoDuplicateSearch.Models;
 
 namespace DinoDuplicateSearch.ViewModels;
 
-public class SearchViewModel : INotifyPropertyChanged
+public class SearchViewModel : INotifyPropertyChanged, IDisposable
 {
     private const string ConfigFile = "config.json";
+    private const string ResultsFile = "last_results.json";
     private readonly DuplicatesFinder _finder = new();
     private CancellationTokenSource? _cts;
 
@@ -96,6 +97,15 @@ public class SearchViewModel : INotifyPropertyChanged
     }
 
     public string TransitivityRatioText => TransitivityRatio.ToString("F2");
+
+    private int _wgcParallelism = Environment.ProcessorCount / 2;
+    public int WgcParallelism
+    {
+        get => _wgcParallelism;
+        set { _wgcParallelism = value; OnPropertyChanged(); OnPropertyChanged(nameof(WgcParallelismText)); }
+    }
+
+    public string WgcParallelismText => WgcParallelism.ToString();
 
     private double _progressValue;
     public double ProgressValue
@@ -207,7 +217,8 @@ public class SearchViewModel : INotifyPropertyChanged
                 BatchSize = BatchSize,
                 PrefetchCount = PrefetchCount,
                 MaxClusterSize = MaxClusterSize,
-                TransitivityRatio = (float)TransitivityRatio
+                TransitivityRatio = (float)TransitivityRatio,
+                WgcParallelism = WgcParallelism
             };
 
             var results = await Task.Run(() =>
@@ -215,6 +226,7 @@ public class SearchViewModel : INotifyPropertyChanged
                 return _finder.FindDuplicates(settings, progress, ct);
             }, ct);
 
+            SaveLastResults(results);
             SearchCompleted?.Invoke(results);
             SwitchToResults?.Invoke(1);
         }
@@ -276,6 +288,8 @@ public class SearchViewModel : INotifyPropertyChanged
                     MaxClusterSize = mc.GetInt32();
                 if (doc.RootElement.TryGetProperty("transitivity_ratio", out var tr))
                     TransitivityRatio = tr.GetDouble();
+                if (doc.RootElement.TryGetProperty("wgc_parallelism", out var wp))
+                    WgcParallelism = wp.GetInt32();
             }
         }
         catch { }
@@ -292,7 +306,8 @@ public class SearchViewModel : INotifyPropertyChanged
                 batch_size = BatchSize,
                 prefetch_count = PrefetchCount,
                 max_cluster_size = MaxClusterSize,
-                transitivity_ratio = TransitivityRatio
+                transitivity_ratio = TransitivityRatio,
+                wgc_parallelism = WgcParallelism
             });
             File.WriteAllText(ConfigFile, json);
         }
@@ -302,4 +317,38 @@ public class SearchViewModel : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
     protected void OnPropertyChanged([CallerMemberName] string? name = null)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+    public void Dispose()
+    {
+        _finder?.Dispose();
+    }
+
+    private void SaveLastResults(List<DuplicateGroup> groups)
+    {
+        try
+        {
+            var result = new SearchResult
+            {
+                DirectoryPath = DirectoryPath,
+                Groups = groups,
+                SavedAt = DateTime.Now
+            };
+            SearchResult.Save(ResultsFile, result);
+        }
+        catch { }
+    }
+
+    public void LoadLastResults()
+    {
+        try
+        {
+            var result = SearchResult.Load(ResultsFile);
+            if (result != null && result.Groups.Count > 0)
+            {
+                DirectoryPath = result.DirectoryPath;
+                SearchCompleted?.Invoke(result.Groups);
+            }
+        }
+        catch { }
+    }
 }

@@ -17,5 +17,13 @@ public partial class MainWindow : Window
         {
             vm.SelectedTabIndex = idx;
         };
+        vm.Search.LoadLastResults();
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        var vm = (MainViewModel)DataContext;
+        vm?.Dispose();
+        base.OnClosed(e);
     }
 }

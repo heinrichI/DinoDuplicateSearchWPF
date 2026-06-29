@@ -9,16 +9,16 @@ public static class GeometricConsistency
 
     public static KeyPoint[] ExtractSiftFeatures(Mat image)
     {
-        var sift = SIFT.Create();
+        using var sift = SIFT.Create();
         var keypoints = sift.Detect(image);
         return keypoints ?? Array.Empty<KeyPoint>();
     }
 
     public static (KeyPoint[] keypoints, float[,]? descriptors) ExtractSiftFeaturesWithDescriptors(Mat image)
     {
-        var sift = SIFT.Create();
+        using var sift = SIFT.Create();
         var keypoints = sift.Detect(image);
-        var descriptors = new Mat();
+        using var descriptors = new Mat();
         sift.Compute(image, ref keypoints, descriptors);
         float[,]? desArray = null;
         if (keypoints.Length > 0 && !descriptors.Empty())
@@ -40,11 +40,23 @@ public static class GeometricConsistency
         if (desQuery == null || desCandidate == null)
             return (false, 0, 0, 0, 0);
 
-        var desQueryMat = FloatArrayToMat(desQuery);
-        var desCandidateMat = FloatArrayToMat(desCandidate);
+        if (desQuery.GetLength(0) < 2 || desCandidate.GetLength(0) < 2)
+            return (false, 0, 0, 0, 0);
 
-        var bf = new BFMatcher(NormTypes.L2, false);
-        var matches = bf.KnnMatch(desQueryMat, desCandidateMat, 2);
+        using var desQueryMat = FloatArrayToMat(desQuery);
+        using var desCandidateMat = FloatArrayToMat(desCandidate);
+
+        DMatch[][]? matches;
+        try
+        {
+            using var bf = new BFMatcher(NormTypes.L2, false);
+            matches = bf.KnnMatch(desQueryMat, desCandidateMat, 2);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[WGC] KnnMatch failed: {ex.Message}");
+            return (false, 0, 0, 0, 0);
+        }
 
         var goodMatches = new List<DMatch>();
         if (matches != null)

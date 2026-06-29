@@ -12,4 +12,5 @@ public class SearchSettings
     public int PrefetchCount { get; set; } = 2;
     public int MaxClusterSize { get; set; } = 50;
     public float TransitivityRatio { get; set; } = 0.7f;
+    public int WgcParallelism { get; set; } = Environment.ProcessorCount / 2;
 }
