@@ -58,11 +58,33 @@
 
                 <!-- Geometric Check -->
                 <Border Background="#FFF8F8F8" CornerRadius="4" Padding="8" Margin="0,0,0,12"
-                        ToolTip="Enable SIFT feature matching + Weak Geometric Consistency check. Slower but more accurate — filters out false positives.">
+                        ToolTip="Enable feature matching for geometric consistency check.">
                     <StackPanel Orientation="Horizontal">
                         <CheckBox IsChecked="{Binding GeometricCheckEnabled}" VerticalAlignment="Center"/>
-                        <TextBlock Text="Enable geometric verification (SIFT/WGC)" VerticalAlignment="Center" Margin="8,0,0,0" FontSize="13"/>
+                        <TextBlock Text="Enable geometric verification" VerticalAlignment="Center" Margin="8,0,0,0" FontSize="13"/>
                     </StackPanel>
+                </Border>
+
+                <!-- Feature Mode -->
+                <Border Background="#FFF8F8F8" CornerRadius="4" Padding="8" Margin="0,0,0,12"
+                        ToolTip="LightGlue: learned SuperPoint + LightGlue features. SIFT: classic feature matching. Auto: try LightGlue, fallback to SIFT.">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Feature matching:" VerticalAlignment="Center" FontSize="13" Foreground="#FF666666"/>
+                        <ComboBox Grid.Column="1" Width="120"
+                                  ItemsSource="{Binding FeatureModes}"
+                                  SelectedItem="{Binding FeatureMode}"
+                                  VerticalAlignment="Center"/>
+                    </Grid>
+                </Border>
+
+                <!-- Feature Backend Status -->
+                <Border Background="#FFEEF5FF" CornerRadius="4" Padding="8" Margin="0,0,0,12">
+                    <TextBlock FontSize="12" Foreground="#FF336699"
+                               Text="{Binding FeatureBackend, StringFormat='Active: {0}', Mode=OneWay}"/>
                 </Border>
 
                 <!-- Search Subfolders -->

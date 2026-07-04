@@ -62,8 +62,20 @@ public class EmbeddingExtractor : IDisposable
             DebugLog.Write("[MODEL] GPU unavailable, using CPU");
         }
         _session = new InferenceSession(_modelPath, options);
+
+        // Detect model output shape to determine if register tokens are present
+        // Model with registers: (batch, 201, 768) = CLS(1) + registers(4) + patches(196)
+        // Model without registers: (batch, 197, 768) = CLS(1) + patches(196)
+        var outputMeta = _session.OutputMetadata["last_hidden_state"];
+        var dims = outputMeta.Dimensions;
+        int seqLen = dims.Length >= 3 ? dims[2] : 768;
+        _clsTokenStride = seqLen; // stride between batch items in flattened output
+        DebugLog.Write($"[MODEL] Output seq_len={seqLen}, CLS stride={_clsTokenStride}");
+
         _progress?.Report(new ProgressData(100, "Model loaded"));
     }
+
+    private int _clsTokenStride = 197; // default for model without registers
 
     public float[] EmbedImage(string path, CancellationToken ct = default)
     {
@@ -211,7 +223,7 @@ public class EmbeddingExtractor : IDisposable
             for (int b = 0; b < batch.Meta.Count; b++)
             {
                 var embedding = new float[768];
-                Array.Copy(output, b * 768, embedding, 0, 768);
+                Array.Copy(output, b * _clsTokenStride, embedding, 0, 768);
 
                 float norm = 0;
                 for (int i = 0; i < embedding.Length; i++) norm += embedding[i] * embedding[i];
@@ -316,7 +328,7 @@ public class EmbeddingExtractor : IDisposable
             for (int b = 0; b < batchMeta.Count; b++)
             {
                 var embedding = new float[768];
-                Array.Copy(output, b * 768, embedding, 0, 768);
+                Array.Copy(output, b * _clsTokenStride, embedding, 0, 768);
 
                 float norm = 0;
                 for (int i = 0; i < embedding.Length; i++) norm += embedding[i] * embedding[i];

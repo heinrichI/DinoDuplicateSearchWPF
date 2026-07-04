@@ -7,6 +7,80 @@ public static class GeometricConsistency
 {
     private const int MinAbsoluteVotes = 50;
 
+    // ─── SuperPoint + LightGlue (new, preferred) ───────────────────────────
+
+    public static (bool isValid, float avgAngle, float avgScale, int matchCount, float avgConfidence)
+        CheckGeometricConsistencyLightGlue(
+            float[] kpQuery, float[,] desQuery, float imageSizeQuery,
+            float[] kpCandidate, float[,] desCandidate, float imageSizeCandidate,
+            LightGlueMatcher matcher,
+            float thresholdRatio = 0.3f)
+    {
+        if (desQuery.GetLength(0) < 2 || desCandidate.GetLength(0) < 2)
+            return (false, 0, 0, 0, 0);
+
+        int[][] matches;
+        try
+        {
+            matches = matcher.Match(kpQuery, desQuery, imageSizeQuery, kpCandidate, desCandidate, imageSizeCandidate, 0.5f);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LightGlue] Match failed: {ex.Message}");
+            return (false, 0, 0, 0, 0);
+        }
+
+        if (matches.Length < 10)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LightGlue] Only {matches.Length} matches, need 10+");
+            return (false, 0, 0, matches.Length, 0);
+        }
+
+        var angles = new List<float>();
+        var scales = new List<float>();
+        float totalConfidence = 0;
+
+        foreach (var m in matches)
+        {
+            int qi = m[0], ci = m[1];
+            var ptQ = new Point2f(kpQuery[qi * 2], kpQuery[qi * 2 + 1]);
+            var ptC = new Point2f(kpCandidate[ci * 2], kpCandidate[ci * 2 + 1]);
+
+            var dx = ptC.X - ptQ.X;
+            var dy = ptC.Y - ptQ.Y;
+            var angle = (float)(Math.Atan2(dy, dx) * 180.0 / Math.PI + 360) % 360;
+            angles.Add(angle);
+
+            if (ptQ.X > 0 && ptC.X > 0)
+            {
+                var dist = MathF.Sqrt(dx * dx + dy * dy);
+                scales.Add(dist > 0 ? 1.0f : 1.0f); // placeholder - LightGlue doesn't provide scale
+            }
+        }
+
+        var histAngles = ComputeHistogram(angles, 24, 0, 360);
+        var maxAngleVotes = histAngles.Max();
+
+        var histScales = ComputeHistogram(scales, 20, 0, 2);
+        var maxScaleVotes = histScales.Max();
+
+        var threshold = matches.Length * thresholdRatio;
+        var isValid = maxAngleVotes > threshold && maxAngleVotes >= MinAbsoluteVotes;
+
+        float avgConf = matches.Length > 0 ? totalConfidence / matches.Length : 0;
+        float avgAngle = 0;
+        if (isValid)
+        {
+            var bestAngleBin = Array.IndexOf(histAngles, maxAngleVotes);
+            var binWidthA = 360f / 24;
+            avgAngle = (bestAngleBin * binWidthA + (bestAngleBin + 1) * binWidthA) / 2;
+        }
+
+        return (isValid, avgAngle, 1.0f, matches.Length, avgConf);
+    }
+
+    // ─── SIFT + BFMatcher (legacy, kept as fallback) ───────────────────────
+
     public static KeyPoint[] ExtractSiftFeatures(Mat image)
     {
         using var sift = SIFT.Create();
@@ -112,6 +186,8 @@ public static class GeometricConsistency
 
         return (false, 0, 0, 0, 0);
     }
+
+    public static int[] ComputeHistogramPublic(List<float> values, int bins, float min, float max) => ComputeHistogram(values, bins, min, max);
 
     private static int[] ComputeHistogram(List<float> values, int bins, float min, float max)
     {

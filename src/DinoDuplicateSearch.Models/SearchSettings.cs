@@ -13,4 +13,11 @@ public class SearchSettings
     public int MaxClusterSize { get; set; } = 50;
     public float TransitivityRatio { get; set; } = 0.7f;
     public int WgcParallelism { get; set; } = Environment.ProcessorCount / 2;
+
+    // SuperPoint + LightGlue settings
+    public bool UseLightGlue { get; set; } = true;
+    public int SuperPointMaxKeypoints { get; set; } = 2000;
+    public float LightGlueConfidenceThreshold { get; set; } = 0.5f;
+    public string SuperPointModelPath { get; set; } = "Models/superpoint.onnx";
+    public string LightGlueModelPath { get; set; } = "Models/lightglue.onnx";
 }

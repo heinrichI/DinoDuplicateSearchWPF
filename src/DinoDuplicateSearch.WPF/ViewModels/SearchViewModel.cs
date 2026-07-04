@@ -107,6 +107,22 @@ public class SearchViewModel : INotifyPropertyChanged, IDisposable
 
     public string WgcParallelismText => WgcParallelism.ToString();
 
+    private string _featureMode = "LightGlue";
+    public string FeatureMode
+    {
+        get => _featureMode;
+        set { _featureMode = value; OnPropertyChanged(); }
+    }
+
+    public string[] FeatureModes => new[] { "LightGlue", "SIFT", "Auto" };
+
+    private string _featureBackend = "";
+    public string FeatureBackend
+    {
+        get => _featureBackend;
+        set { _featureBackend = value; OnPropertyChanged(); }
+    }
+
     private double _progressValue;
     public double ProgressValue
     {
@@ -218,7 +234,8 @@ public class SearchViewModel : INotifyPropertyChanged, IDisposable
                 PrefetchCount = PrefetchCount,
                 MaxClusterSize = MaxClusterSize,
                 TransitivityRatio = (float)TransitivityRatio,
-                WgcParallelism = WgcParallelism
+                WgcParallelism = WgcParallelism,
+                UseLightGlue = FeatureMode == "LightGlue" || FeatureMode == "Auto"
             };
 
             var results = await Task.Run(() =>
@@ -226,6 +243,7 @@ public class SearchViewModel : INotifyPropertyChanged, IDisposable
                 return _finder.FindDuplicates(settings, progress, ct);
             }, ct);
 
+            FeatureBackend = _finder.LastFeatureBackend;
             SaveLastResults(results);
             SearchCompleted?.Invoke(results);
             SwitchToResults?.Invoke(1);
@@ -290,6 +308,8 @@ public class SearchViewModel : INotifyPropertyChanged, IDisposable
                     TransitivityRatio = tr.GetDouble();
                 if (doc.RootElement.TryGetProperty("wgc_parallelism", out var wp))
                     WgcParallelism = wp.GetInt32();
+                if (doc.RootElement.TryGetProperty("feature_mode", out var fm))
+                    FeatureMode = fm.GetString() ?? "LightGlue";
             }
         }
         catch { }
@@ -307,7 +327,8 @@ public class SearchViewModel : INotifyPropertyChanged, IDisposable
                 prefetch_count = PrefetchCount,
                 max_cluster_size = MaxClusterSize,
                 transitivity_ratio = TransitivityRatio,
-                wgc_parallelism = WgcParallelism
+                wgc_parallelism = WgcParallelism,
+                feature_mode = FeatureMode
             });
             File.WriteAllText(ConfigFile, json);
         }
