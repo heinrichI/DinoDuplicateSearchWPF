@@ -15,13 +15,15 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         set { _selectedTabIndex = value; OnPropertyChanged(); }
     }
 
-    public SearchViewModel Search { get; } = new();
+    public SearchViewModel Search { get; }
     public ResultsViewModel Results { get; } = new();
     public ICommand OpenImageCommand { get; }
     public ICommand SwitchTabCommand { get; }
 
-    public MainViewModel()
+    public MainViewModel(SearchViewModel search)
     {
+        Search = search ?? throw new ArgumentNullException(nameof(search));
+        Results = new ResultsViewModel();
         OpenImageCommand = new RelayCommand(OpenImage);
         SwitchTabCommand = new RelayCommand(SwitchTab);
     }

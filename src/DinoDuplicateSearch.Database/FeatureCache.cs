@@ -1,9 +1,10 @@
 using System.Data.SQLite;
 using System.IO.Compression;
+using DinoDuplicateSearch.Abstractions;
 
 namespace DinoDuplicateSearch.Database;
 
-public class FeatureCache : IDisposable
+public class FeatureCache : IFeatureCache
 {
     private readonly SQLiteConnection _conn;
 

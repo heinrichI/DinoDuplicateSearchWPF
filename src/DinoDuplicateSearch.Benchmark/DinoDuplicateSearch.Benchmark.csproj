@@ -1,16 +1,27 @@
 <Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <Nullable>enable</Nullable>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows7.0</TargetFramework>
+    <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
   </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu" Version="1.21.*" />
     <PackageReference Include="OpenCvSharp4" Version="4.10.*" />
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.10.*" />
+    <PackageReference Include="System.Data.SQLite" Version="1.0.*" />
   </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\DinoDuplicateSearch.Abstractions\DinoDuplicateSearch.Abstractions.csproj" />
+    <ProjectReference Include="..\DinoDuplicateSearch.CV\DinoDuplicateSearch.CV.csproj" />
+    <ProjectReference Include="..\DinoDuplicateSearch.ML\DinoDuplicateSearch.ML.csproj" />
     <ProjectReference Include="..\DinoDuplicateSearch.Models\DinoDuplicateSearch.Models.csproj" />
+    <ProjectReference Include="..\DinoDuplicateSearch.Database\DinoDuplicateSearch.Database.csproj" />
+    <ProjectReference Include="..\DinoDuplicateSearch.WPF\DinoDuplicateSearch.WPF.csproj" />
   </ItemGroup>
+
 </Project>

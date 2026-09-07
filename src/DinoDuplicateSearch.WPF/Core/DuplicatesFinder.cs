@@ -2,8 +2,8 @@ using System;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Threading.Tasks;
+using DinoDuplicateSearch.Abstractions;
 using DinoDuplicateSearch.Models;
-using DinoDuplicateSearch.Database;
 using DinoDuplicateSearch.CV;
 using DinoDuplicateSearch.ML;
 using DinoDuplicateSearch.WPF.Core;
@@ -18,22 +18,21 @@ public class DuplicatesFinder : IDisposable
     private const int PQTopK = 5;
 
     private readonly EmbeddingExtractor _embeddingExtractor;
-    private readonly FeatureCache _cache;
+    private readonly IFeatureCache _cache;
+    private readonly IGeometricVerifierFactory _verifierFactory;
+    private IGeometricVerifier? _currentVerifier;
     private float _wgcThreshold = 0.3f;
     private float _minSimilarityForUnion = 0.5f;
-
-    // SuperPoint + LightGlue pipeline (preferred)
-    private SuperPointLightGluePipeline? _pipeline;
-    private bool _useLightGlue = true;
 
     private static readonly string[] SupportedExtensions = { ".jpg", ".jpeg", ".png", ".webp" };
 
     public string LastFeatureBackend { get; private set; } = "Unknown";
 
-    public DuplicatesFinder(string modelPath = "Models/dinov2-base.onnx")
+    public DuplicatesFinder(IFeatureCache cache, EmbeddingExtractor embeddingExtractor, IGeometricVerifierFactory verifierFactory)
     {
-        _cache = new FeatureCache();
-        _embeddingExtractor = new EmbeddingExtractor(modelPath, _cache);
+        _cache = cache ?? throw new ArgumentNullException(nameof(cache));
+        _embeddingExtractor = embeddingExtractor ?? throw new ArgumentNullException(nameof(embeddingExtractor));
+        _verifierFactory = verifierFactory ?? throw new ArgumentNullException(nameof(verifierFactory));
     }
 
     public static List<string> ListImages(string folder, bool searchSubfolders = false)
@@ -54,43 +53,9 @@ public class DuplicatesFinder : IDisposable
         _embeddingExtractor.SetProgress(progress);
         _embeddingExtractor.BatchSize = settings.BatchSize;
         _embeddingExtractor.PrefetchCount = settings.PrefetchCount;
+        _currentVerifier = settings.GeometricCheckEnabled ? _verifierFactory.Create(settings.UseLightGlue) : null;
 
-        _useLightGlue = settings.UseLightGlue;
-
-        // Initialize SuperPoint + LightGlue pipeline if enabled
-        if (_useLightGlue && settings.GeometricCheckEnabled)
-        {
-            try
-            {
-                var pipelinePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Models", "superpoint_lightglue_pipeline.onnx");
-                if (File.Exists(pipelinePath))
-                {
-                    _pipeline = new SuperPointLightGluePipeline(pipelinePath);
-                    LastFeatureBackend = "SuperPoint + LightGlue (fused)";
-                    DebugLog.Write("[WGC] Using fused SuperPoint+LightGlue pipeline");
-                }
-                else
-                {
-                    DebugLog.Write($"[WGC] Pipeline model not found: {pipelinePath}, falling back to SIFT");
-                    _useLightGlue = false;
-                    LastFeatureBackend = "SIFT + WGC (fallback)";
-                }
-            }
-            catch (Exception ex)
-            {
-                DebugLog.Write($"[WGC] Pipeline load failed: {ex.Message}, falling back to SIFT");
-                _useLightGlue = false;
-                LastFeatureBackend = "SIFT + WGC (fallback)";
-            }
-        }
-        else if (settings.GeometricCheckEnabled)
-        {
-            LastFeatureBackend = "SIFT + WGC";
-        }
-        else
-        {
-            LastFeatureBackend = "SIFT (verification disabled)";
-        }
+        LastFeatureBackend = _currentVerifier?.Name ?? "SIFT (verification disabled)";
 
         ct.ThrowIfCancellationRequested();
         progress?.Report(new ProgressData(0, "Scanning folder for images..."));
@@ -212,8 +177,7 @@ public class DuplicatesFinder : IDisposable
 
                         if (done % Math.Max(1, totalPairs / 100) == 0)
                         {
-                            var backendLabel = _useLightGlue ? "LightGlue" : "SIFT";
-                        progress?.Report(new ProgressData(45.0 + 35.0 * done / totalPairs, $"{backendLabel}: {done}/{totalPairs} {b1} vs {b2}", $"[{status}] sim={sim:F3}"));
+                            progress?.Report(new ProgressData(45.0 + 35.0 * done / totalPairs, $"{_currentVerifier?.Name}: {done}/{totalPairs} {b1} vs {b2}", $"[{status}] sim={sim:F3}"));
                         }
 
                         if (ok && sim >= _minSimilarityForUnion)
@@ -536,93 +500,13 @@ public class DuplicatesFinder : IDisposable
         if (mat1.Empty() || mat2.Empty())
             return (false, 0, 0, 0, 0);
 
-        bool result;
-        float angle, scale;
-        int angleVotes, scaleVotes;
+        var (ok, angle, scale, angleVotes, scaleVotes) = _currentVerifier!.Verify(mat1, mat2);
+        DebugLog.Write($"[PAIR] {_currentVerifier.Name}: votes={angleVotes}/{scaleVotes} backend={LastFeatureBackend}");
 
-        if (_useLightGlue && _pipeline != null)
-        {
-            try
-            {
-                var (matches, scores, kp0, kp1) = _pipeline.Match(mat1, mat2);
-
-                if (matches.Length < 5)
-                {
-                    DebugLog.Write($"[PAIR] Only {matches.Length} matches from pipeline");
-                    return (false, 0, 0, matches.Length, 0);
-                }
-
-                // Compute average angle from matches
-                var angles = new List<float>();
-                foreach (var m in matches)
-                {
-                    float dx = kp1[m[1], 0] - kp0[m[0], 0];
-                    float dy = kp1[m[1], 1] - kp0[m[0], 1];
-                    var matchAngle = (float)(Math.Atan2(dy, dx) * 180.0 / Math.PI + 360) % 360;
-                    angles.Add(matchAngle);
-                }
-
-                var histAngles = GeometricConsistency.ComputeHistogramPublic(angles, 24, 0, 360);
-                int maxAngleVotes = histAngles.Max();
-                float avgAngle = 0;
-                if (maxAngleVotes > 0)
-                {
-                    int bestBin = Array.IndexOf(histAngles, maxAngleVotes);
-                    float binWidth = 360f / 24;
-                    avgAngle = (bestBin * binWidth + (bestBin + 1) * binWidth) / 2;
-                }
-
-                float avgScore = scores.Length > 0 ? scores.Average() : 0;
-                // Filter weak matches: need enough matches, angle consistency, and decent confidence
-                bool passed = matches.Length >= 10 && maxAngleVotes >= 5 && avgScore >= 0.5f;
-
-                LastFeatureBackend = "SuperPoint + LightGlue (fused)";
-                result = passed;
-                angle = avgAngle;
-                scale = 1.0f;
-                angleVotes = matches.Length;
-                scaleVotes = (int)(avgScore * 100);
-
-                DebugLog.Write($"[PAIR] Pipeline: {matches.Length} matches, angle_votes={maxAngleVotes}, avg_score={avgScore:F3}");
-            }
-            catch (Exception ex)
-            {
-                DebugLog.Write($"[WGC] Pipeline failed: {ex.Message}, falling back to SIFT");
-                LastFeatureBackend = "SIFT + WGC (fallback)";
-                _useLightGlue = false;
-                return RunSift(mat1, mat2, path1, path2, mtime1, mtime2);
-            }
-        }
-        else
-        {
-            return RunSift(mat1, mat2, path1, path2, mtime1, mtime2);
-        }
-
-        try { _cache.SetWgc(path1, path2, mtime1, mtime2, result, angle, scale, angleVotes, scaleVotes); }
+        try { _cache.SetWgc(path1, path2, mtime1, mtime2, ok, angle, scale, angleVotes, scaleVotes); }
         catch (Exception ex) { DebugLog.Write($"[WGC] Cache write error: {ex.Message}"); }
 
-        return (result, angle, scale, angleVotes, scaleVotes);
-    }
-
-    private (bool ok, float angle, float scale, int angleVotes, int scaleVotes) RunSift(
-        OpenCvSharp.Mat mat1, OpenCvSharp.Mat mat2,
-        string path1, string path2, double mtime1, double mtime2)
-    {
-        var kp1 = GeometricConsistency.ExtractSiftFeaturesWithDescriptors(mat1);
-        var kp2 = GeometricConsistency.ExtractSiftFeaturesWithDescriptors(mat2);
-
-        if (kp1.keypoints.Length == 0 || kp2.keypoints.Length == 0 || kp1.descriptors == null || kp2.descriptors == null)
-            return (false, 0, 0, 0, 0);
-
-        var wgcResult = GeometricConsistency.CheckGeometricConsistency(
-            kp1.keypoints, kp1.descriptors, kp2.keypoints, kp2.descriptors, _wgcThreshold);
-
-        LastFeatureBackend = "SIFT + WGC";
-
-        try { _cache.SetWgc(path1, path2, mtime1, mtime2, wgcResult.isValid, wgcResult.avgAngle, wgcResult.avgScale, wgcResult.angleVotes, wgcResult.scaleVotes); }
-        catch (Exception ex) { DebugLog.Write($"[WGC] Cache write error: {ex.Message}"); }
-
-        return (wgcResult.isValid, wgcResult.avgAngle, wgcResult.avgScale, wgcResult.angleVotes, wgcResult.scaleVotes);
+        return (ok, angle, scale, angleVotes, scaleVotes);
     }
 
     private static double GetMtime(string path)
@@ -676,7 +560,6 @@ public class DuplicatesFinder : IDisposable
     public void Dispose()
     {
         _embeddingExtractor?.Dispose();
-        _pipeline?.Dispose();
         _cache?.Dispose();
     }
 }

@@ -7,10 +7,6 @@
         WindowStartupLocation="CenterScreen"
         Background="#FFF5F5F5">
 
-    <Window.DataContext>
-        <vm:MainViewModel/>
-    </Window.DataContext>
-
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="42"/>

@@ -9,7 +9,7 @@ namespace DinoDuplicateSearch.CV;
 /// Input: interleaved grayscale images (batch, 1, H, W).
 /// Output: keypoints (batch, 1024, 2), matches (M, 3), mscores (M,).
 /// </summary>
-public class SuperPointLightGluePipeline : IDisposable
+public class SuperPointLightGluePipeline : ISuperPointLightGluePipeline
 {
     private readonly string _modelPath;
     private InferenceSession? _session;

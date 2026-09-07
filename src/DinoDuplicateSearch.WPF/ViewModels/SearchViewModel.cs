@@ -14,7 +14,7 @@ public class SearchViewModel : INotifyPropertyChanged, IDisposable
 {
     private const string ConfigFile = "config.json";
     private const string ResultsFile = "last_results.json";
-    private readonly DuplicatesFinder _finder = new();
+    private readonly DuplicatesFinder _finder;
     private CancellationTokenSource? _cts;
 
     private string _directoryPath = "";
@@ -114,7 +114,16 @@ public class SearchViewModel : INotifyPropertyChanged, IDisposable
         set { _featureMode = value; OnPropertyChanged(); }
     }
 
-    public string[] FeatureModes => new[] { "LightGlue", "SIFT", "Auto" };
+    public string[] FeatureModes => new[] { "LightGlue", "SIFT" };
+
+    private double _minMatchScore = 0.5;
+    public double MinMatchScore
+    {
+        get => _minMatchScore;
+        set { _minMatchScore = value; OnPropertyChanged(); OnPropertyChanged(nameof(MinMatchScoreText)); }
+    }
+
+    public string MinMatchScoreText => MinMatchScore.ToString("F2");
 
     private string _featureBackend = "";
     public string FeatureBackend
@@ -173,8 +182,9 @@ public class SearchViewModel : INotifyPropertyChanged, IDisposable
     public event Action<List<DuplicateGroup>>? SearchCompleted;
     public event Action<int>? SwitchToResults;
 
-    public SearchViewModel()
+    public SearchViewModel(DuplicatesFinder finder)
     {
+        _finder = finder ?? throw new ArgumentNullException(nameof(finder));
         BrowseCommand = new RelayCommand(_ => Browse());
         FindCommand = new RelayCommand(_ => FindDuplicates(), _ => !IsSearching);
         CancelCommand = new RelayCommand(_ => _cts?.Cancel(), _ => IsSearching);
@@ -235,7 +245,8 @@ public class SearchViewModel : INotifyPropertyChanged, IDisposable
                 MaxClusterSize = MaxClusterSize,
                 TransitivityRatio = (float)TransitivityRatio,
                 WgcParallelism = WgcParallelism,
-                UseLightGlue = FeatureMode == "LightGlue" || FeatureMode == "Auto"
+                UseLightGlue = FeatureMode == "LightGlue",
+                MinMatchScore = (float)MinMatchScore
             };
 
             var results = await Task.Run(() =>
@@ -310,6 +321,8 @@ public class SearchViewModel : INotifyPropertyChanged, IDisposable
                     WgcParallelism = wp.GetInt32();
                 if (doc.RootElement.TryGetProperty("feature_mode", out var fm))
                     FeatureMode = fm.GetString() ?? "LightGlue";
+                if (doc.RootElement.TryGetProperty("min_match_score", out var ms))
+                    MinMatchScore = ms.GetDouble();
             }
         }
         catch { }
@@ -328,7 +341,8 @@ public class SearchViewModel : INotifyPropertyChanged, IDisposable
                 max_cluster_size = MaxClusterSize,
                 transitivity_ratio = TransitivityRatio,
                 wgc_parallelism = WgcParallelism,
-                feature_mode = FeatureMode
+                feature_mode = FeatureMode,
+                min_match_score = MinMatchScore
             });
             File.WriteAllText(ConfigFile, json);
         }

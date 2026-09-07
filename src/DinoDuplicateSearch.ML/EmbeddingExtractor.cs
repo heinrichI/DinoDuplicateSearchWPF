@@ -2,9 +2,9 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using DinoDuplicateSearch.Abstractions;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
-using DinoDuplicateSearch.Database;
 using DinoDuplicateSearch.Models;
 
 namespace DinoDuplicateSearch.ML;
@@ -13,7 +13,7 @@ public class EmbeddingExtractor : IDisposable
 {
     private readonly string _modelPath;
     private InferenceSession? _session;
-    private readonly FeatureCache _cache;
+    private readonly IFeatureCache _cache;
     private IProgress<ProgressData>? _progress;
     private bool _useGpu;
     private int _batchSize = 32;
@@ -30,10 +30,10 @@ public class EmbeddingExtractor : IDisposable
         set => _prefetchCount = Math.Max(0, value);
     }
 
-    public EmbeddingExtractor(string modelPath = "Models/dinov2-base.onnx", FeatureCache? cache = null)
+    public EmbeddingExtractor(string modelPath, IFeatureCache cache)
     {
         _modelPath = modelPath;
-        _cache = cache ?? new FeatureCache();
+        _cache = cache ?? throw new ArgumentNullException(nameof(cache));
     }
 
     public void SetProgress(IProgress<ProgressData>? progress)
