@@ -58,7 +58,7 @@
                                             </ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate DataType="{x:Type sys:String}" xmlns:sys="clr-namespace:System;assembly=mscorlib">
-                                                    <Border Width="150" Margin="4" Cursor="Hand" Tag="{Binding}">
+                                                    <Border Width="150" Margin="4" Cursor="Hand" Tag="{Binding}" ToolTip="{Binding}">
                                                         <Border.InputBindings>
                                                             <MouseBinding MouseAction="LeftDoubleClick"
                                                                           Command="{Binding DataContext.OpenImageCommand, RelativeSource={RelativeSource AncestorType=Window}}"
