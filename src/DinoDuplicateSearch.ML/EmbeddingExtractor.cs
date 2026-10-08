@@ -63,19 +63,15 @@ public class EmbeddingExtractor : IDisposable
         }
         _session = new InferenceSession(_modelPath, options);
 
-        // Detect model output shape to determine if register tokens are present
-        // Model with registers: (batch, 201, 768) = CLS(1) + registers(4) + patches(196)
-        // Model without registers: (batch, 197, 768) = CLS(1) + patches(196)
+        // CLS берём как [b, 0, :] из тензора — не зависит от stride.
+        // (Старый код брал dims[2] = 768 = feature-dim как "seq_len": при батче > 1
+        //  все слоты кроме 0-го получали обрывки первого файла, а не CLS своей картинки.)
+        // Реальное число токенов dims[1] (197 без / 201 с register-токенами) — только для диагностики.
         var outputMeta = _session.OutputMetadata["last_hidden_state"];
-        var dims = outputMeta.Dimensions;
-        int seqLen = dims.Length >= 3 ? dims[2] : 768;
-        _clsTokenStride = seqLen; // stride between batch items in flattened output
-        DebugLog.Write($"[MODEL] Output seq_len={seqLen}, CLS stride={_clsTokenStride}");
+        DebugLog.Write($"[MODEL] Output last_hidden_state dims: {string.Join("x", outputMeta.Dimensions)}");
 
         _progress?.Report(new ProgressData(100, "Model loaded"));
     }
-
-    private int _clsTokenStride = 197; // default for model without registers
 
     public float[] EmbedImage(string path, CancellationToken ct = default)
     {
@@ -218,12 +214,13 @@ public class EmbeddingExtractor : IDisposable
             };
 
             using var gpuResults = _session!.Run(inputs);
-            var output = gpuResults.First().AsTensor<float>().ToArray();
+            var outTensor = gpuResults.First().AsTensor<float>();
 
             for (int b = 0; b < batch.Meta.Count; b++)
             {
                 var embedding = new float[768];
-                Array.Copy(output, b * _clsTokenStride, embedding, 0, 768);
+                // CLS-токен = [b, 0, :] — напрямую из тензора (flat-offset b*stride был источником бага).
+                for (int i = 0; i < 768; i++) embedding[i] = outTensor[b, 0, i];
 
                 float norm = 0;
                 for (int i = 0; i < embedding.Length; i++) norm += embedding[i] * embedding[i];
@@ -323,12 +320,13 @@ public class EmbeddingExtractor : IDisposable
                 : $"Batch {batchNum}/{totalBatches} on CPU ({validCount})..."));
 
             using var gpuResults = _session!.Run(inputs);
-            var output = gpuResults.First().AsTensor<float>().ToArray();
+            var outTensor = gpuResults.First().AsTensor<float>();
 
             for (int b = 0; b < batchMeta.Count; b++)
             {
                 var embedding = new float[768];
-                Array.Copy(output, b * _clsTokenStride, embedding, 0, 768);
+                // CLS-токен = [b, 0, :] — напрямую из тензора.
+                for (int i = 0; i < 768; i++) embedding[i] = outTensor[b, 0, i];
 
                 float norm = 0;
                 for (int i = 0; i < embedding.Length; i++) norm += embedding[i] * embedding[i];

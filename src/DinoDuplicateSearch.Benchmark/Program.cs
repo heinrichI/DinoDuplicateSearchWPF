@@ -14,10 +14,13 @@ class Program
     static void Main(string[] args)
     {
         string testDir = args.Length > 0 ? args[0] : @"F:\E\SourceAntiDupl\TestBluring";
+        // необязательный размер батча (дефолт 32), например: "TestCropHard" 1
+        int batchSize = args.Length > 1 && int.TryParse(args[1], out var bs) ? bs : 32;
         string modelDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Models");
 
         Console.WriteLine("=== Duplicate Image Detection Benchmark ===");
         Console.WriteLine($"Test folder: {testDir}");
+        Console.WriteLine($"Embedding batch size: {batchSize}");
         Console.WriteLine($"Models: {modelDir}");
         Console.WriteLine();
 
@@ -90,7 +93,7 @@ class Program
         foreach (var (name, settings) in configs)
         {
             Console.Write($"Running: {name}... ");
-            var result = RunBenchmark(name, settings, modelDir);
+            var result = RunBenchmark(name, settings, modelDir, batchSize);
             results.Add(result);
             Console.WriteLine($"Done ({result.ElapsedMs}ms, {result.Groups} groups, {result.TotalPairs} pairs)");
         }
@@ -127,11 +130,12 @@ class Program
         }
     }
 
-    static BenchmarkResult RunBenchmark(string name, SearchSettings settings, string modelDir)
+    static BenchmarkResult RunBenchmark(string name, SearchSettings settings, string modelDir, int batchSize)
     {
         var sw = Stopwatch.StartNew();
         var cache = new FeatureCache();
         var embeddingExtractor = new EmbeddingExtractor(Path.Combine(modelDir, "dinov2-base.onnx"), cache);
+        embeddingExtractor.BatchSize = batchSize;
         var pipelinePath = Path.Combine(modelDir, "superpoint_lightglue_pipeline.onnx");
         var pipeline = new SuperPointLightGluePipeline(pipelinePath);
         var lightGlueVerifier = new LightGlueGeometricVerifier(pipeline);
